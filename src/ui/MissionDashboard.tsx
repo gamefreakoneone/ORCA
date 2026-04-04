@@ -1,63 +1,109 @@
-import { WorldState } from "../simulation/worldModel";
+import { WorldState, GRID_SIZE, MAX_BATTERY } from "../simulation/worldModel";
 
 interface MissionDashboardProps {
   world: WorldState;
 }
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
+const PHASE_LABELS: Record<string, string> = {
+  scouting: "🔍 Scouting",
+  planning: "🧠 Strategic Planning",
+  mining: "⛏️ Mining Operations"
+};
+
+const STATE_LABELS: Record<string, string> = {
+  idle: "Idle",
+  patrol: "Patrolling",
+  moving_to_target: "En Route",
+  collecting: "Mining",
+  returning: "Returning",
+  avoiding: "Evading",
+  waiting: "Fish Block",
+  surveying: "Surveying",
+  recharging: "Recharging"
+};
 
 export default function MissionDashboard({ world }: MissionDashboardProps) {
-  const activeRobots = world.robots.filter((robot) => robot.state !== "idle").length;
+  if (world.missionStatus === "editing") return null;
+
+  const surveyPct = Math.round((world.surveyedCount / (GRID_SIZE * GRID_SIZE)) * 100);
 
   return (
     <section className="panel-section">
       <div className="section-header">
         <span>Mission Dashboard</span>
-        <span className={`section-pill ${world.apiStatus}`}>Claude {world.apiStatus}</span>
+        <span className="section-pill phase-pill">{PHASE_LABELS[world.missionPhase] || world.missionPhase}</span>
       </div>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <span className="stat-label">Collected</span>
-          <strong>{world.collectedTotal}</strong>
+
+      {/* Phase-specific status */}
+      {world.missionPhase === "scouting" && (
+        <div className="phase-progress">
+          <div className="progress-bar">
+            <div className="progress-fill survey-fill" style={{ width: `${surveyPct}%` }} />
+          </div>
+          <span className="progress-label">Survey: {surveyPct}% ({world.surveyedCount}/{GRID_SIZE * GRID_SIZE} zones)</span>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">Avoided</span>
-          <strong>{world.avoidedZones}</strong>
+      )}
+
+      {world.missionPhase === "planning" && (
+        <div className="planning-indicator">
+          <div className="spinner" />
+          <span>Claude is analyzing survey data...</span>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">Active Subs</span>
-          <strong>{activeRobots}</strong>
+      )}
+
+      {/* Mission totals */}
+      <div className="mission-totals">
+        <div className="total-item cobalt-total">
+          <span className="total-label">Cobalt</span>
+          <span className="total-value">{world.collectedCobalt}</span>
         </div>
-        <div className="stat-card">
-          <span className="stat-label">Elapsed</span>
-          <strong>{formatElapsed(world.elapsedMs)}</strong>
+        <div className="total-item manganese-total">
+          <span className="total-label">Manganese</span>
+          <span className="total-value">{world.collectedManganese}</span>
+        </div>
+        <div className="total-item">
+          <span className="total-label">Score</span>
+          <span className="total-value">{world.collectedCobalt * 3 + world.collectedManganese}</span>
+        </div>
+        <div className="total-item">
+          <span className="total-label">Avoided</span>
+          <span className="total-value">{world.avoidedZones}</span>
         </div>
       </div>
 
-      <div className="robot-card-list">
+      {/* Robot cards */}
+      <div className="robot-cards">
         {world.robots.map((robot) => {
-          const loadPercent = Math.round((robot.cargo / robot.maxCargo) * 100);
+          const batteryPct = Math.round((robot.battery / MAX_BATTERY) * 100);
+          const batteryClass = batteryPct > 50 ? "battery-high" : batteryPct > 20 ? "battery-mid" : "battery-low";
+          const isGeologist = robot.role === "geologist";
+
           return (
-            <article className="robot-card" key={robot.id}>
+            <div key={robot.id} className={`robot-card ${isGeologist ? "geologist-card" : "worker-card"}`}>
               <div className="robot-card-header">
-                <strong>{robot.id}</strong>
-                <span className={`robot-state ${robot.state}`}>{robot.state.replaceAll("_", " ")}</span>
-              </div>
-              <div className="robot-meta">
-                <span>Target: {robot.targetZone ?? "none"}</span>
-                <span>
-                  Cargo: {robot.cargo}/{robot.maxCargo}
+                <span className="robot-name">{robot.id}</span>
+                <span className={`role-badge ${isGeologist ? "badge-geo" : "badge-worker"}`}>
+                  {isGeologist ? "GEO" : "WKR"}
                 </span>
               </div>
-              <div className="cargo-bar">
-                <div className="cargo-fill" style={{ width: `${loadPercent}%` }} />
-              </div>
-            </article>
+              <div className="robot-state">{STATE_LABELS[robot.state] || robot.state}</div>
+              {!isGeologist && (
+                <>
+                  <div className="battery-section">
+                    <div className="battery-bar-container">
+                      <div className={`battery-bar-fill ${batteryClass}`} style={{ width: `${batteryPct}%` }} />
+                    </div>
+                    <span className="battery-label">{batteryPct}%</span>
+                  </div>
+                  <div className="cargo-section">
+                    <span>Cargo: {robot.cargo}/{robot.maxCargo}</span>
+                  </div>
+                </>
+              )}
+              {robot.targetZone && (
+                <div className="robot-target">→ {robot.targetZone}</div>
+              )}
+            </div>
           );
         })}
       </div>

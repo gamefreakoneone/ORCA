@@ -1,91 +1,115 @@
-# AquaSwarm Progress Notes
+# AquaSwarm v2 — Progress Notes
 
 ## Current Status
 
-The project has been scaffolded as a Vite + React + TypeScript single-page app in the repo root.
-The core demo loop is implemented and builds successfully with `npm run build`.
+Multi-phase autonomous mining simulation with geologist scouting, Claude strategic planning, worker bots with battery mechanics, and dynamic fish migration. Built as Vite + React + TypeScript.
 
 ## What Has Been Built
 
-### App foundation
-- Vite configuration and TypeScript project setup
-- React app entry point and global styling
-- Split-screen layout with 3D viewport and right-side control panel
+### v2 Architecture: Multi-Phase Mission
 
-### Simulation layer
-- **World Constants**: 8x8 grid of 6m² zones; 4 robots with max cargo of 5; 200ms simulation ticks.
-- **Claude Polling**: Remote mission control is queried every 6 seconds (`6000ms`) to minimize API overhead and allow local autonomy.
-- **World State**: Tracks zones (minerals, animals, status, claims), robots (position, cargo, speed), and a rolling mission log.
-- **Editor Mode**: Allows cycling minerals (`0, 3, 6, 9`) and animals (`0, 2, 5, 8`) to stage different scenarios.
-- **Mission Lifecycle**: Includes `editing`, `running`, `completed`, and `stopped` phases with a dedicated "Demo Scenario" loader.
+**Phase 1 — SCOUTING**: A geologist robot autonomously surveys the entire 8×8 grid using a spiral-from-center sweep. It scans each zone for cobalt (high-value), manganese (low-value), and fish. Workers remain idle at the mothership. No Claude calls during this phase.
 
-### Robot behavior
-- **Finite-state machine**: States include `idle`, `patrol`, `moving_to_target`, `collecting`, `returning`, and `avoiding`.
-- **Target Selection**: Non-assigned robots use a scoring heuristic: `(Unknown? 5 : 0) + (Minerals * 2) - (Distance * 0.18)`.
-- **Cargo Management**: Robots collect until `cargo >= 4`, then trigger a `returning` state to the home base.
-- **Collision Avoidance**: A `SEPARATION_THRESHOLD` of 2.6 units triggers a mutual-repulsion push to prevent overlaps.
-- **Arrival Logic**: A threshold of 0.85 units defines "arrival" at target zones.
+**Phase 2 — STRATEGIC PLANNING**: Once the survey is complete, the mothership transmits the full geological report to Claude. Claude creates a targeted mining plan — each worker submarine gets its own ordered list of zones to visit, with priority assignments and ignored zones. This is a single, token-efficient API call.
 
-### Claude mission control
-- **Direct Anthropic Integration**: Uses `fetch` targeting `https://api.anthropic.com/v1/messages` with `anthropic-dangerous-direct-browser-access` enabled.
-- **System Prompting**: Enforces rules like "Avoid zones with >= 6 animals" and "Prioritize minerals >= 7 with <= 3 animals".
-- **State Synchronization**: Maps Claude's high-level `assignments` (move, return, patrol, avoid, hold) and `zone_updates` back to the local `WorldState`. Assignments from Claude override the local "Patrol" heuristic until the robot reaches its destination or is reassigned.
-- **JSON Resilience**: Includes a custom extractor to find and parse JSON blocks even if Claude includes conversational filler.
-- **Non-blocking Polling**: The simulation ticks independently at ~60fps while Claude requests happen asynchronously; if the API is slow, robots continue following their last assigned intent or fallback to autonomous patrolling.
+**Phase 3 — MINING OPERATIONS**: Workers deploy according to Claude's plan. They mine cobalt first (3x value), then manganese. Battery drains during movement and collection. When exhausted (0%), bots return to base for a full recharge. Fish schools migrate randomly between grids and block new robot entry. When workers become idle with remaining resources, Claude is re-queried for lightweight reallocation orders.
 
-### 3D presentation
-- Ocean floor plane and grid
-- Zone overlays for `unknown`, `mine`, `avoid`, and `depleted`
-- Mineral clusters and animal markers
-- Submarine meshes with state-based colors
-- Home base mesh
-- Target lines from robots to active destinations
-- Orbit controls and basic lighting
+### World Model (worldModel.ts)
+- **Dual Minerals**: Cobalt (high-value, 3x score) and Manganese (low-value, 1x score)
+- **Each zone** can hold cobalt + manganese + fish simultaneously
+- **Robot Roles**: Geologist (1 scout, cyan, faster) and Workers (3 miners)
+- **Battery System**: 100% capacity, drains on move (0.15/tick) and collect (0.3/tick), exhaustion triggers forced return, full recharge at base
+- **Survey Tracking**: Each zone has `surveyed` flag; world tracks `surveyedCount`
+- **Mission Phases**: `scouting` → `planning` → `mining`
+- **Per-Sub Plans**: Each worker carries an `assignedPlan` (ordered zone list) and `planIndex`
 
-### UI and mission visibility
-- API key input field
-- Pre-mission editor controls
-- Live mission dashboard with robot cards and cargo bars
-- Claude/system command log
-- Mission summary panel for completed or stopped runs
+### Geologist FSM (geologistFSM.ts)
+- Spiral sweep from center of grid outward
+- Marks zones as `surveyed` on arrival
+- Logs interesting findings (cobalt, manganese, fish)
+- Returns to mothership when all 64 zones scanned
+- Triggers `surveyComplete` flag on docking
 
-## Demo Flow That Works Now
+### Worker FSM (robotFSM.ts)
+- Follows assigned plan from Claude (ordered zone list)
+- Falls back to score-based patrol when plan is exhausted
+- Scoring: `(cobalt * 6) + (manganese * 2) - (distance * 0.18)`
+- Battery drain per tick during movement and collection
+- Forced return on exhaustion (battery = 0), instant full recharge
+- Fish blocking: `waiting` state when target zone has fish
+- Cobalt prioritized over manganese during collection
+- Plan index advances when a zone is depleted
 
-1. Launch the app.
-2. Click `Load Demo Scenario`.
-3. Click `Start Mission`.
-4. Watch submarines fan out, mine, avoid flagged zones, and return to base.
-5. Use the right panel to narrate robot states, mission totals, and command-log activity.
+### Fish Migration (fishMigration.ts)
+- Schools randomly migrate to adjacent zones every 40 ticks
+- 30% chance per school per migration cycle
+- Fish disperse after 8 ticks near a robot (robots scare them)
+- Workers already mining continue when fish arrive, but no new bots can enter
 
-## Important Caveat
+### Claude Strategic Planner (missionControl.ts)
+- **`requestStrategicPlan()`**: Called once after survey. Claude receives full survey grid and returns deployment orders per worker.
+- **`requestReallocation()`**: Called when idle workers exist and resources remain. Lightweight re-query with current grid status.
+- Token-efficient: 1 strategic call + N small reallocation calls vs. old model (polling every 6s)
+- Fallback: if no API key provided, workers deploy in autonomous patrol mode
 
-The current Claude request layer intentionally does **not** send an API key header because that matched the provided implementation spec.
-That means:
+### 3D Presentation
+- **Cobalt**: Gold/amber glowing dodecahedrons with rotation
+- **Manganese**: Teal matte spheres with rotation
+- **Geologist sub**: Cyan/teal with bright point light
+- **Worker subs**: State-based colors with low-battery shift to orange/red
+- **Battery bars**: Floating 3D bars above each worker sub
+- **Fish**: Swimming bob/sway animation, red when dangerous (≥6)
+- **Zone overlays**: Fog-of-war (unsurveyed), surveyed pulse, fish-blocked warning, mine/avoid/depleted
+- Grid, ocean floor, home base, target lines
 
-- In Claude-hosted or auth-injected environments, mission-control calls may work as-is.
-- In a normal standalone local browser session, direct Anthropic requests will usually fail unless auth is provided by the environment or the request layer is adjusted.
-- The rest of the simulation still runs locally even when Claude calls fail.
+### UI & Mission Visibility
+- **Phase display**: Current phase shown in HUD banner and dashboard
+- **Survey progress bar**: Fills during scouting phase
+- **Claude spinner**: Shows during strategic planning phase
+- **Mineral breakdown**: Cobalt + Manganese collected, score = (Co×3 + Mn)
+- **Robot cards**: Role badges (GEO/WKR), battery bars, state, target
+- **Mining plan display**: Shows Claude's deployment per worker, priorities, ignored zones, alerts
+- **Editor**: Three toggle modes (Cobalt, Manganese, Wildlife)
+- **Mission log**: Color-coded entries (system=gold, claude=teal, geologist=cyan)
+- **Mission summary**: Full breakdown on completion/stop
 
-## Verification Completed
+## Demo Flow
 
-- `npm install`
-- `npm run build`
-
-The production build succeeds.
-Vite reports a large bundle warning because Three.js and related dependencies are heavy, but the build is still valid for demo use.
+1. Launch the app
+2. Paste Anthropic API key
+3. Click `Load Demo Scenario` (sets up mixed cobalt/manganese deposits with fish)
+4. Click `Start Mission`
+5. **Watch Phase 1**: Geologist spirals out from center, scanning zones, fog lifts
+6. **Watch Phase 2**: Claude analyzes survey (spinner), plan appears in sidebar
+7. **Watch Phase 3**: Workers deploy to assigned sectors, mine cobalt first, battery drains
+8. Fish migrate randomly, occasionally blocking zones
+9. Workers exhaust battery → return to base → recharge → get reallocated by Claude
+10. Mission completes when all minerals extracted
 
 ## Useful Project Files
 
-- `src/App.tsx`
-- `src/simulation/worldModel.ts`
-- `src/simulation/robotFSM.ts`
-- `src/simulation/tickEngine.ts`
-- `src/claude/missionControl.ts`
-- `src/components/Scene.tsx`
-- `src/ui/ControlPanel.tsx`
+- `src/App.tsx` — Phase orchestration, Claude call triggers
+- `src/simulation/worldModel.ts` — Types, constants, world state
+- `src/simulation/geologistFSM.ts` — Geologist spiral sweep
+- `src/simulation/robotFSM.ts` — Worker FSM with battery
+- `src/simulation/fishMigration.ts` — Fish migration system
+- `src/simulation/tickEngine.ts` — Phase-aware tick loop
+- `src/simulation/collisionAvoidance.ts` — Robot collision avoidance
+- `src/claude/missionControl.ts` — Claude API integration
+- `src/claude/schemas.ts` — Response type definitions
+- `src/components/Scene.tsx` — 3D scene layout
+- `src/components/SubmarineModel.tsx` — Sub meshes with battery bars
+- `src/components/MineralCluster.tsx` — Cobalt/manganese visuals
+- `src/components/AnimalCluster.tsx` — Fish clusters
+- `src/components/ZoneOverlay.tsx` — Zone status overlays
+- `src/ui/ControlPanel.tsx` — Main sidebar
+- `src/ui/MissionDashboard.tsx` — Robot cards, stats
+- `src/ui/MiningPlanDisplay.tsx` — Claude's plan display
+- `src/ui/EditorControls.tsx` — Scenario editor
+- `src/ui/MissionSummary.tsx` — End-of-mission stats
+- `src/ui/CommandLog.tsx` — Mission log
 
-## Suggested Next Improvements
+## Verification
 
-- Add a true standalone Anthropic auth path if local browser Claude control is required
-- Add a small “mission-control offline” banner when requests fail repeatedly
-- Trim bundle size only if performance becomes an issue during the demo
+- `npm run build` — ✅ TypeScript compiles cleanly, Vite builds successfully
+- Bundle: ~1.1MB (Three.js heavy, acceptable for demo)

@@ -1,64 +1,71 @@
-import { EditorMode, WorldState } from "../simulation/worldModel";
+import { EditorMode, WorldState, totalMinerals, GRID_SIZE } from "../simulation/worldModel";
 
 interface EditorControlsProps {
   world: WorldState;
   editorMode: EditorMode;
-  onSetEditorMode: (mode: EditorMode) => void;
   onLoadDemo: () => void;
   onStart: () => void;
   onReset: () => void;
+  onSetEditorMode: (mode: EditorMode) => void;
 }
 
 export default function EditorControls({
   world,
   editorMode,
-  onSetEditorMode,
   onLoadDemo,
   onStart,
-  onReset
+  onReset,
+  onSetEditorMode
 }: EditorControlsProps) {
+  const totalCobalt = world.zones.reduce((sum, z) => sum + z.cobalt, 0);
+  const totalManganese = world.zones.reduce((sum, z) => sum + z.manganese, 0);
+  const totalFish = world.zones.reduce((sum, z) => sum + z.animals, 0);
+  const nonEmptyZones = world.zones.filter((z) => totalMinerals(z) > 0 || z.animals > 0).length;
+
   return (
     <section className="panel-section">
       <div className="section-header">
-        <span>Editor Mode</span>
-        <span className="section-pill">Pre-mission</span>
+        <span>Scenario Editor</span>
+        <span className="section-pill">{GRID_SIZE}×{GRID_SIZE}</span>
       </div>
-      <div className="button-row">
+
+      <div className="editor-toggle-group">
         <button
-          className={editorMode === "minerals" ? "primary" : "ghost"}
-          onClick={() => onSetEditorMode("minerals")}
+          className={editorMode === "cobalt" ? "active cobalt-btn" : "cobalt-btn"}
+          onClick={() => onSetEditorMode("cobalt")}
           type="button"
         >
-          Place Minerals
+          ⬡ Cobalt
         </button>
         <button
-          className={editorMode === "animals" ? "primary" : "ghost"}
+          className={editorMode === "manganese" ? "active manganese-btn" : "manganese-btn"}
+          onClick={() => onSetEditorMode("manganese")}
+          type="button"
+        >
+          ● Manganese
+        </button>
+        <button
+          className={editorMode === "animals" ? "active" : ""}
           onClick={() => onSetEditorMode("animals")}
           type="button"
         >
-          Place Animals
+          🐟 Wildlife
         </button>
       </div>
-      <p className="muted-copy">
-        Click a zone in the 3D grid. Minerals cycle {`0 -> 3 -> 6 -> 9 -> 0`}. Animals cycle
-        {" "}
-        {`0 -> 2 -> 5 -> 8 -> 0`}.
-      </p>
-      <div className="button-stack">
-        <button className="secondary" onClick={onLoadDemo} type="button">
-          Load Demo Scenario
-        </button>
-        <button
-          className="primary action"
-          disabled={world.zones.every((zone) => zone.minerals === 0)}
-          onClick={onStart}
-          type="button"
-        >
+
+      <div className="editor-stats">
+        <span className="stat-cobalt">Co: {totalCobalt}</span>
+        <span className="stat-manganese">Mn: {totalManganese}</span>
+        <span className="stat-fish">🐟: {totalFish}</span>
+        <span className="stat-zones">{nonEmptyZones} zones</span>
+      </div>
+
+      <div className="button-group">
+        <button onClick={onLoadDemo} type="button">Load Demo Scenario</button>
+        <button className="primary" disabled={nonEmptyZones === 0} onClick={onStart} type="button">
           Start Mission
         </button>
-        <button className="ghost" onClick={onReset} type="button">
-          Clear Field
-        </button>
+        <button onClick={onReset} type="button">Reset Field</button>
       </div>
     </section>
   );

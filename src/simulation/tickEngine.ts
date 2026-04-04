@@ -1,34 +1,23 @@
 import {
   appendLog,
   checkMissionComplete,
-  ClaudeWorldSummary,
   summarizeWorldForClaude,
   WorldState,
-  CLAUDE_INTERVAL_MS
+  MiningPlan,
+  getIdleWorkers,
+  getWorkers,
+  hasRemainingResources,
+  totalMinerals,
+  getZoneById
 } from "./worldModel";
 import { applyCollisionAvoidance } from "./collisionAvoidance";
 import { runRobotFSM } from "./robotFSM";
-import { MissionControlResult } from "../claude/schemas";
-
-export interface PendingMissionControlRequest {
-  world: WorldState;
-  summary: ClaudeWorldSummary;
-  apiKey: string;
-}
+import { runGeologistFSM } from "./geologistFSM";
+import { runFishMigration } from "./fishMigration";
+import { StrategicPlanResult, ReallocationResult } from "../claude/schemas";
 
 function recomputeAvoidedZones(world: WorldState): number {
   return world.zones.filter((zone) => zone.status === "avoid").length;
-}
-
-function releaseRobotClaims(world: WorldState, robotId: string, zoneId: string | null): void {
-  if (!zoneId) {
-    return;
-  }
-
-  const zone = world.zones.find((candidate) => candidate.id === zoneId);
-  if (zone && zone.claimedBy === robotId) {
-    zone.claimedBy = null;
-  }
 }
 
 export function tickWorld(world: WorldState, dtMs: number): WorldState {
@@ -36,77 +25,70 @@ export function tickWorld(world: WorldState, dtMs: number): WorldState {
     return world;
   }
 
-  let next = runRobotFSM(world, dtMs);
-  next = applyCollisionAvoidance(next);
-  next = {
-    ...next,
-    tick: next.tick + 1,
-    elapsedMs: next.elapsedMs + dtMs,
-    avoidedZones: recomputeAvoidedZones(next)
-  };
+  let next: WorldState;
 
-  if (checkMissionComplete(next)) {
-    next = appendLog(
-      {
+  if (world.missionPhase === "scouting") {
+    // Only geologist moves, workers idle at base
+    next = runGeologistFSM(world, dtMs);
+    next = runFishMigration(next);
+    next = {
+      ...next,
+      tick: next.tick + 1,
+      elapsedMs: next.elapsedMs + dtMs
+    };
+
+    // Check if survey completed → transition to planning
+    if (next.surveyComplete && next.missionPhase === "scouting") {
+      next = {
         ...next,
-        missionStatus: "completed",
-        apiStatus: next.apiStatus === "pending" ? "ready" : next.apiStatus
-      },
-      {
-        tick: next.tick,
-        source: "system",
-        message: "Mission complete. All known mineral deposits have been cleared."
-      }
-    );
+        missionPhase: "planning"
+      };
+    }
+  } else if (world.missionPhase === "planning") {
+    // Waiting for Claude's strategic plan — just tick time
+    next = runFishMigration(world);
+    next = {
+      ...next,
+      tick: next.tick + 1,
+      elapsedMs: next.elapsedMs + dtMs
+    };
+  } else {
+    // Mining phase
+    next = runRobotFSM(world, dtMs);
+    next = applyCollisionAvoidance(next);
+    next = runFishMigration(next);
+    next = {
+      ...next,
+      tick: next.tick + 1,
+      elapsedMs: next.elapsedMs + dtMs,
+      avoidedZones: recomputeAvoidedZones(next)
+    };
+
+    if (checkMissionComplete(next)) {
+      next = appendLog(
+        {
+          ...next,
+          missionStatus: "completed",
+          apiStatus: next.apiStatus === "pending" ? "ready" : next.apiStatus
+        },
+        {
+          tick: next.tick,
+          source: "system",
+          message: "Mission complete! All mineral deposits have been extracted. 🎉"
+        }
+      );
+    }
   }
 
   return next;
 }
 
-export function prepareMissionControlRequest(
-  world: WorldState,
-  apiKey: string
-): PendingMissionControlRequest | null {
-  if (world.missionStatus !== "running") {
-    return null;
-  }
-
-  if (world.apiStatus === "pending") {
-    return null;
-  }
-
-  if (world.elapsedMs - world.lastClaudeAt < CLAUDE_INTERVAL_MS) {
-    return null;
-  }
-
-  const nextWorld = appendLog(
-    {
-      ...world,
-      lastClaudeAt: world.elapsedMs,
-      apiStatus: "pending"
-    },
-    {
-      tick: world.tick,
-      source: "system",
-      message: "Mission control snapshot transmitted."
-    }
-  );
-
-  return {
-    world: nextWorld,
-    summary: summarizeWorldForClaude(nextWorld),
-    apiKey
-  };
-}
-
-export function applyMissionControlResult(
-  world: WorldState,
-  result: MissionControlResult
-): WorldState {
+// Apply the strategic plan from Claude to the world state
+export function applyStrategicPlan(world: WorldState, result: StrategicPlanResult): WorldState {
   let next: WorldState = {
     ...world,
-    zones: world.zones.map((zone) => ({ ...zone })),
-    robots: world.robots.map((robot) => ({ ...robot })),
+    zones: world.zones.map((z) => ({ ...z })),
+    robots: world.robots.map((r) => ({ ...r, assignedPlan: [...r.assignedPlan] })),
     missionLog: [...world.missionLog],
     apiStatus: result.ok ? "ready" : "error"
   };
@@ -115,115 +97,62 @@ export function applyMissionControlResult(
     return appendLog(next, {
       tick: next.tick,
       source: "system",
-      message: `Mission control unavailable: ${result.error}`
+      message: `Strategic planning failed: ${result.error}`
     });
   }
 
-  for (const update of result.command.zone_updates) {
-    const zone = next.zones.find((candidate) => candidate.id === update.zone_id);
-    if (!zone) {
-      continue;
-    }
+  const plan: MiningPlan = {
+    deployment: result.plan.deployment,
+    ignore_zones: result.plan.ignore_zones,
+    alerts: result.plan.alerts
+  };
 
-    zone.status = update.new_status;
-    if (update.new_status === "avoid") {
+  next.miningPlan = plan;
+
+  // Mark ignored zones
+  for (const zoneId of plan.ignore_zones) {
+    const zone = next.zones.find((z) => z.id === zoneId);
+    if (zone) {
+      zone.status = "avoid";
       zone.claimedBy = null;
+    }
+  }
+
+  // Assign deployment plans to workers
+  for (const order of plan.deployment) {
+    const robot = next.robots.find((r) => r.id === order.robot_id);
+    if (!robot || robot.role !== "worker") continue;
+
+    // Filter out invalid zones from the plan
+    const validZones = order.target_zones.filter((zoneId) => {
+      const zone = getZoneById(next, zoneId);
+      return zone && zone.status !== "avoid" && totalMinerals(zone) > 0;
+    });
+
+    robot.assignedPlan = validZones;
+    robot.planIndex = 0;
+
+    if (validZones.length > 0) {
+      robot.targetZone = validZones[0];
+      robot.state = "moving_to_target";
+
+      // Claim the first zone
+      const firstZone = next.zones.find((z) => z.id === validZones[0]);
+      if (firstZone && !firstZone.claimedBy) {
+        firstZone.claimedBy = robot.id;
+        firstZone.status = "mine";
+      }
     }
 
     next = appendLog(next, {
       tick: next.tick,
       source: "claude",
-      message: `${update.zone_id} marked ${update.new_status}: ${update.reason}`
+      message: `${robot.id} deployed → ${validZones.join(" → ")} [${order.priority}]: ${order.reason}`
     });
   }
 
-  for (const assignment of result.command.assignments) {
-    const robot = next.robots.find((candidate) => candidate.id === assignment.robot_id);
-    if (!robot) {
-      continue;
-    }
-
-    if (assignment.action === "hold") {
-      next = appendLog(next, {
-        tick: next.tick,
-        source: "claude",
-        message: `${robot.id} holding position. ${assignment.reason}`
-      });
-      continue;
-    }
-
-    if (assignment.action === "return_to_base") {
-      releaseRobotClaims(next, robot.id, robot.targetZone);
-      robot.targetZone = null;
-      robot.state = "returning";
-      next = appendLog(next, {
-        tick: next.tick,
-        source: "claude",
-        message: `${robot.id} returning to base. ${assignment.reason}`
-      });
-      continue;
-    }
-
-    if (assignment.action === "patrol") {
-      releaseRobotClaims(next, robot.id, robot.targetZone);
-      robot.targetZone = null;
-      robot.state = "patrol";
-      next = appendLog(next, {
-        tick: next.tick,
-        source: "claude",
-        message: `${robot.id} dispatched to patrol. ${assignment.reason}`
-      });
-      continue;
-    }
-
-    if (assignment.action === "avoid_zone") {
-      if (assignment.target_zone) {
-        const zone = next.zones.find((candidate) => candidate.id === assignment.target_zone);
-        if (zone) {
-          zone.status = "avoid";
-          zone.claimedBy = null;
-        }
-      }
-      releaseRobotClaims(next, robot.id, robot.targetZone);
-      robot.targetZone = assignment.target_zone;
-      robot.state = "avoiding";
-      next = appendLog(next, {
-        tick: next.tick,
-        source: "claude",
-        message: `${robot.id} diverting away from ${assignment.target_zone ?? "the flagged area"}. ${assignment.reason}`
-      });
-      continue;
-    }
-
-    if (assignment.action === "move_to_target" && assignment.target_zone) {
-      const zone = next.zones.find((candidate) => candidate.id === assignment.target_zone);
-      if (!zone) {
-        continue;
-      }
-
-      if (zone.animals >= 6 || zone.status === "avoid") {
-        continue;
-      }
-
-      if (zone.claimedBy && zone.claimedBy !== robot.id) {
-        continue;
-      }
-
-      releaseRobotClaims(next, robot.id, robot.targetZone);
-      zone.claimedBy = robot.id;
-      zone.status = zone.status === "depleted" ? "unknown" : "mine";
-      robot.targetZone = zone.id;
-      robot.state = "moving_to_target";
-
-      next = appendLog(next, {
-        tick: next.tick,
-        source: "claude",
-        message: `${robot.id} targeting ${zone.id}. ${assignment.reason}`
-      });
-    }
-  }
-
-  for (const alert of result.command.alerts) {
+  // Log alerts
+  for (const alert of plan.alerts) {
     next = appendLog(next, {
       tick: next.tick,
       source: "claude",
@@ -231,6 +160,128 @@ export function applyMissionControlResult(
     });
   }
 
+  // Transition to mining phase
+  next.missionPhase = "mining";
   next.avoidedZones = recomputeAvoidedZones(next);
+
+  next = appendLog(next, {
+    tick: next.tick,
+    source: "system",
+    message: "Strategic plan received. Workers deploying to assigned sectors. Mining operations commenced."
+  });
+
   return next;
+}
+
+// Apply reallocation orders from Claude to idle bots
+export function applyReallocation(world: WorldState, result: ReallocationResult): WorldState {
+  let next: WorldState = {
+    ...world,
+    zones: world.zones.map((z) => ({ ...z })),
+    robots: world.robots.map((r) => ({ ...r, assignedPlan: [...r.assignedPlan] })),
+    missionLog: [...world.missionLog],
+    apiStatus: result.ok ? "ready" : "error"
+  };
+
+  if (!result.ok) {
+    return appendLog(next, {
+      tick: next.tick,
+      source: "system",
+      message: `Reallocation failed: ${result.error}`
+    });
+  }
+
+  for (const order of result.reallocation.orders) {
+    const robot = next.robots.find((r) => r.id === order.robot_id);
+    if (!robot || robot.role !== "worker") continue;
+
+    if (order.action === "move_to_target" && order.target_zone) {
+      const zone = next.zones.find((z) => z.id === order.target_zone);
+      if (!zone || zone.status === "avoid" || zone.animals >= 6) continue;
+      if (zone.claimedBy && zone.claimedBy !== robot.id) continue;
+
+      robot.targetZone = zone.id;
+      robot.state = "moving_to_target";
+      robot.assignedPlan = [zone.id];
+      robot.planIndex = 0;
+
+      if (!zone.claimedBy) {
+        zone.claimedBy = robot.id;
+        zone.status = "mine";
+      }
+
+      next = appendLog(next, {
+        tick: next.tick,
+        source: "claude",
+        message: `${robot.id} reallocated → ${zone.id}: ${order.reason}`
+      });
+    } else if (order.action === "return_to_base") {
+      robot.targetZone = null;
+      robot.state = "returning";
+      next = appendLog(next, {
+        tick: next.tick,
+        source: "claude",
+        message: `${robot.id} recalled to base: ${order.reason}`
+      });
+    } else if (order.action === "patrol") {
+      robot.targetZone = null;
+      robot.state = "patrol";
+      next = appendLog(next, {
+        tick: next.tick,
+        source: "claude",
+        message: `${robot.id} sent on patrol: ${order.reason}`
+      });
+    } else if (order.action === "hold") {
+      next = appendLog(next, {
+        tick: next.tick,
+        source: "claude",
+        message: `${robot.id} holding position: ${order.reason}`
+      });
+    }
+  }
+
+  for (const alert of result.reallocation.alerts) {
+    next = appendLog(next, {
+      tick: next.tick,
+      source: "claude",
+      message: alert
+    });
+  }
+
+  return next;
+}
+
+// Check if we should request a reallocation from Claude
+export function shouldRequestReallocation(world: WorldState): boolean {
+  if (world.missionPhase !== "mining") return false;
+  if (world.missionStatus !== "running") return false;
+  if (world.apiStatus === "pending") return false;
+  if (!hasRemainingResources(world)) return false;
+
+  const idleWorkers = getIdleWorkers(world);
+  if (idleWorkers.length === 0) return false;
+
+  // Check if there are workers with no assigned plan or empty plan
+  const workersNeedingOrders = idleWorkers.filter(
+    (w) => w.assignedPlan.length === 0 || w.planIndex >= w.assignedPlan.length
+  );
+
+  if (workersNeedingOrders.length === 0) return false;
+
+  // Throttle: at least 5 seconds between reallocation calls
+  const timeSinceLastClaude = world.elapsedMs - world.lastClaudeAt;
+  if (timeSinceLastClaude < 5000) return false;
+
+  return true;
+}
+
+// Check if we need the initial strategic plan
+export function shouldRequestStrategicPlan(world: WorldState): boolean {
+  return (
+    world.missionPhase === "planning" &&
+    world.missionStatus === "running" &&
+    world.apiStatus !== "pending" &&
+    world.surveyComplete &&
+    world.miningPlan === null
+  );
 }

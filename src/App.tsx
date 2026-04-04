@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Scene from "./components/Scene";
-import { requestMissionControl } from "./claude/missionControl";
+import { requestStrategicPlan, requestReallocation } from "./claude/missionControl";
 import {
   EditorMode,
   TICK_MS,
@@ -10,20 +10,24 @@ import {
   prepareWorldForMission,
   resetWorld,
   stopMission,
+  summarizeWorldForClaude,
   toggleZoneAnimals,
-  toggleZoneMinerals
+  toggleZoneCobalt,
+  toggleZoneManganese,
+  appendLog
 } from "./simulation/worldModel";
 import {
-  PendingMissionControlRequest,
-  applyMissionControlResult,
-  prepareMissionControlRequest,
+  applyStrategicPlan,
+  applyReallocation,
+  shouldRequestStrategicPlan,
+  shouldRequestReallocation,
   tickWorld
 } from "./simulation/tickEngine";
 import ControlPanel from "./ui/ControlPanel";
 
 export default function App() {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
-  const [editorMode, setEditorMode] = useState<EditorMode>("minerals");
+  const [editorMode, setEditorMode] = useState<EditorMode>("cobalt");
   const [apiKey, setApiKey] = useState("");
   const requestInFlight = useRef(false);
   const worldRef = useRef(world);
@@ -40,29 +44,94 @@ export default function App() {
     const intervalId = window.setInterval(() => {
       const currentWorld = worldRef.current;
       const tickedWorld = tickWorld(currentWorld, TICK_MS);
-      let pendingRequest: PendingMissionControlRequest | null = null;
+      worldRef.current = tickedWorld;
+      setWorld(tickedWorld);
 
+      // Phase transitions and Claude calls
       if (!requestInFlight.current) {
-        pendingRequest = prepareMissionControlRequest(tickedWorld, apiKey);
-      }
+        // Strategic plan request (after survey)
+        if (shouldRequestStrategicPlan(tickedWorld) && apiKey.trim()) {
+          requestInFlight.current = true;
 
-      const nextWorld = pendingRequest?.world ?? tickedWorld;
-      worldRef.current = nextWorld;
-      setWorld(nextWorld);
+          const updatedWorld = {
+            ...tickedWorld,
+            apiStatus: "pending" as const,
+            lastClaudeAt: tickedWorld.elapsedMs
+          };
+          worldRef.current = updatedWorld;
+          setWorld(updatedWorld);
 
-      if (pendingRequest) {
-        requestInFlight.current = true;
-        requestMissionControl(pendingRequest.summary, pendingRequest.apiKey)
-          .then((result) => {
-            setWorld((currentWorld) => {
-              const resolvedWorld = applyMissionControlResult(currentWorld, result);
-              worldRef.current = resolvedWorld;
-              return resolvedWorld;
+          const summary = summarizeWorldForClaude(updatedWorld);
+          requestStrategicPlan(summary, apiKey)
+            .then((result) => {
+              setWorld((w) => {
+                const resolved = applyStrategicPlan(w, result);
+                worldRef.current = resolved;
+                return resolved;
+              });
+            })
+            .finally(() => {
+              requestInFlight.current = false;
             });
-          })
-          .finally(() => {
-            requestInFlight.current = false;
-          });
+        }
+
+        // Reallocation request (idle bots during mining)
+        if (shouldRequestReallocation(tickedWorld) && apiKey.trim()) {
+          requestInFlight.current = true;
+
+          const updatedWorld = appendLog(
+            {
+              ...tickedWorld,
+              apiStatus: "pending" as const,
+              lastClaudeAt: tickedWorld.elapsedMs
+            },
+            {
+              tick: tickedWorld.tick,
+              source: "system",
+              message: "Idle workers detected. Querying Claude for reallocation orders..."
+            }
+          );
+          worldRef.current = updatedWorld;
+          setWorld(updatedWorld);
+
+          const summary = summarizeWorldForClaude(updatedWorld);
+          requestReallocation(summary, apiKey)
+            .then((result) => {
+              setWorld((w) => {
+                const resolved = applyReallocation(w, result);
+                worldRef.current = resolved;
+                return resolved;
+              });
+            })
+            .finally(() => {
+              requestInFlight.current = false;
+            });
+        }
+
+        // If in planning phase but no API key, create a fallback plan
+        if (shouldRequestStrategicPlan(tickedWorld) && !apiKey.trim()) {
+          const fallbackWorld = appendLog(
+            {
+              ...tickedWorld,
+              missionPhase: "mining" as const,
+              miningPlan: { deployment: [], ignore_zones: [], alerts: ["No API key — workers using autonomous patrol mode."] },
+              apiStatus: "error" as const
+            },
+            {
+              tick: tickedWorld.tick,
+              source: "system",
+              message: "No API key provided. Workers deploying in autonomous patrol mode (no strategic plan)."
+            }
+          );
+
+          // Set workers to patrol
+          fallbackWorld.robots = fallbackWorld.robots.map((r) =>
+            r.role === "worker" ? { ...r, state: "patrol" as const } : r
+          );
+
+          worldRef.current = fallbackWorld;
+          setWorld(fallbackWorld);
+        }
       }
     }, TICK_MS);
 
@@ -76,11 +145,18 @@ export default function App() {
       return;
     }
 
-    setWorld((currentWorld) =>
-      editorMode === "minerals"
-        ? toggleZoneMinerals(currentWorld, zoneId)
-        : toggleZoneAnimals(currentWorld, zoneId)
-    );
+    setWorld((currentWorld) => {
+      switch (editorMode) {
+        case "cobalt":
+          return toggleZoneCobalt(currentWorld, zoneId);
+        case "manganese":
+          return toggleZoneManganese(currentWorld, zoneId);
+        case "animals":
+          return toggleZoneAnimals(currentWorld, zoneId);
+        default:
+          return currentWorld;
+      }
+    });
   };
 
   return (
@@ -90,6 +166,7 @@ export default function App() {
           <Scene editorMode={editorMode} onZoneClick={handleZoneClick} world={world} />
           <div className="hud-banner">
             <span>{world.missionStatus.toUpperCase()}</span>
+            <span>Phase: {world.missionPhase}</span>
             <span>Mode: {editorMode}</span>
             <span>Ticks: {world.tick}</span>
           </div>

@@ -20,6 +20,8 @@
   --danger: #ff6f5d;
   --muted: #9ab5bf;
   --card-bg: rgba(17, 38, 49, 0.9);
+  --cobalt: #f5a623;
+  --manganese: #4ecdc4;
 }
 
 * {
@@ -191,6 +193,12 @@ button:disabled {
   color: #b7f7f5;
 }
 
+.phase-pill {
+  background: rgba(73, 208, 206, 0.2);
+  color: #b7f7f5;
+  font-weight: 600;
+}
+
 .muted-copy {
   margin: 0;
   color: var(--muted);
@@ -253,6 +261,73 @@ button:disabled {
   color: #b7f7f5;
 }
 
+/* --- Editor --- */
+
+.editor-toggle-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.editor-toggle-group button {
+  flex: 1;
+  padding: 0.6rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(69, 116, 128, 0.18);
+  color: #d5eef3;
+  font-size: 0.82rem;
+  border: 1px solid transparent;
+  transition: all 150ms ease;
+}
+
+.editor-toggle-group button.active {
+  border-color: var(--accent);
+  background: rgba(73, 208, 206, 0.18);
+  color: var(--accent);
+}
+
+.editor-toggle-group button.cobalt-btn.active {
+  border-color: var(--cobalt);
+  background: rgba(245, 166, 35, 0.18);
+  color: var(--cobalt);
+}
+
+.editor-toggle-group button.manganese-btn.active {
+  border-color: var(--manganese);
+  background: rgba(78, 205, 196, 0.18);
+  color: var(--manganese);
+}
+
+.editor-stats {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.stat-cobalt {
+  color: var(--cobalt);
+  font-weight: 600;
+}
+
+.stat-manganese {
+  color: var(--manganese);
+  font-weight: 600;
+}
+
+.stat-fish {
+  color: #44aaff;
+}
+
+.stat-zones {
+  color: var(--muted);
+}
+
+.button-group {
+  display: grid;
+  gap: 0.7rem;
+}
+
 .button-row,
 .button-stack {
   display: grid;
@@ -292,23 +367,381 @@ button:disabled {
   box-shadow: 0 10px 24px rgba(67, 212, 194, 0.2);
 }
 
-.stats-grid,
+/* --- Phase progress --- */
+
+.phase-progress {
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 200ms ease;
+}
+
+.survey-fill {
+  background: linear-gradient(90deg, #00e5ff, #49d0ce);
+}
+
+.progress-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.planning-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(73, 208, 206, 0.1);
+  border: 1px solid rgba(73, 208, 206, 0.2);
+  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--accent);
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(73, 208, 206, 0.3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Mission totals --- */
+
+.mission-totals {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.total-item {
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid rgba(111, 187, 201, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.total-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.total-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.cobalt-total .total-value {
+  color: var(--cobalt);
+}
+
+.manganese-total .total-value {
+  color: var(--manganese);
+}
+
+/* --- Robot cards --- */
+
+.robot-cards {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.robot-card {
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: var(--card-bg);
+  border: 1px solid rgba(111, 187, 201, 0.1);
+}
+
+.geologist-card {
+  border-color: rgba(0, 229, 255, 0.25);
+  background: rgba(0, 40, 50, 0.6);
+}
+
+.robot-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.robot-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.role-badge {
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.badge-geo {
+  background: rgba(0, 229, 255, 0.2);
+  color: #66ffff;
+}
+
+.badge-worker {
+  background: rgba(73, 208, 206, 0.15);
+  color: #b7f7f5;
+}
+
+.robot-state {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: #d2eef7;
+  margin-bottom: 0.35rem;
+}
+
+.battery-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.battery-bar-container {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.battery-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 200ms ease;
+}
+
+.battery-high {
+  background: linear-gradient(90deg, #3fd6bc, #44ff88);
+}
+
+.battery-mid {
+  background: linear-gradient(90deg, #f5a623, #ffd449);
+}
+
+.battery-low {
+  background: linear-gradient(90deg, #ff4444, #ff6f5d);
+}
+
+.battery-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: right;
+}
+
+.cargo-section {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.robot-target {
+  font-size: 0.74rem;
+  color: var(--accent);
+  margin-top: 0.2rem;
+}
+
+/* --- Mining Plan Display --- */
+
+.mining-plan-section {
+  border-color: rgba(73, 208, 206, 0.2);
+}
+
+.plan-order {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(8, 18, 25, 0.7);
+  margin-bottom: 0.5rem;
+  border-left: 3px solid var(--accent);
+}
+
+.plan-order.priority-high {
+  border-left-color: var(--cobalt);
+}
+
+.plan-order.priority-medium {
+  border-left-color: var(--manganese);
+}
+
+.plan-order.priority-low {
+  border-left-color: var(--muted);
+}
+
+.plan-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.plan-robot {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.priority-badge {
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.priority-badge.priority-high {
+  background: rgba(245, 166, 35, 0.2);
+  color: var(--cobalt);
+}
+
+.priority-badge.priority-medium {
+  background: rgba(78, 205, 196, 0.2);
+  color: var(--manganese);
+}
+
+.priority-badge.priority-low {
+  background: rgba(154, 181, 191, 0.2);
+  color: var(--muted);
+}
+
+.plan-route {
+  font-size: 0.8rem;
+  margin-bottom: 0.3rem;
+  color: #d7edf2;
+}
+
+.route-arrow {
+  color: var(--muted);
+}
+
+.route-zone {
+  color: var(--accent);
+}
+
+.plan-reason {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.plan-ignored {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 68, 68, 0.08);
+  border: 1px solid rgba(255, 68, 68, 0.15);
+  font-size: 0.8rem;
+  color: #ffaea5;
+  margin-bottom: 0.5rem;
+}
+
+.plan-alert {
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(73, 208, 206, 0.08);
+  border: 1px solid rgba(73, 208, 206, 0.15);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.35rem;
+}
+
+/* --- Summary --- */
+
+.summary-section {
+  border-color: rgba(74, 223, 131, 0.18);
+}
+
+.pill-success {
+  background: rgba(74, 223, 131, 0.2);
+  color: #b7f7cb;
+}
+
+.pill-stopped {
+  background: rgba(255, 95, 95, 0.16);
+  color: #ffc2c2;
+}
+
 .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.summary-item {
+  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid rgba(111, 187, 201, 0.1);
+}
+
+.summary-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.summary-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.cobalt-value {
+  color: var(--cobalt);
+}
+
+.manganese-value {
+  color: var(--manganese);
+}
+
+.score-value {
+  color: var(--accent-strong);
+}
+
+/* --- Command Log --- */
+
+.stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
 }
 
 .stat-card,
-.summary-metric,
-.robot-card {
+.summary-metric {
   border-radius: 16px;
   background: var(--card-bg);
   border: 1px solid rgba(111, 187, 201, 0.1);
-}
-
-.stat-card,
-.summary-metric {
   padding: 0.8rem;
 }
 
@@ -319,70 +752,6 @@ button:disabled {
   margin-bottom: 0.25rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-
-.robot-card-list {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 0.9rem;
-  max-height: 18rem;
-  overflow-y: auto;
-  padding-right: 0.2rem;
-}
-
-.robot-card {
-  padding: 0.8rem;
-}
-
-.robot-card-header,
-.robot-meta,
-.log-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.robot-card-header {
-  margin-bottom: 0.5rem;
-}
-
-.robot-meta {
-  color: var(--muted);
-  font-size: 0.82rem;
-  margin-bottom: 0.55rem;
-}
-
-.robot-state {
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  color: #d2eef7;
-}
-
-.robot-state.collecting {
-  color: #8df0b1;
-}
-
-.robot-state.returning {
-  color: #ffe18e;
-}
-
-.robot-state.avoiding {
-  color: #ffaea5;
-}
-
-.cargo-bar {
-  width: 100%;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.cargo-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #3fd6bc, #ffe27d);
 }
 
 .command-log-section {
@@ -417,6 +786,10 @@ button:disabled {
   border-left-color: #70a8ff;
 }
 
+.log-entry.geologist {
+  border-left-color: #00e5ff;
+}
+
 .log-entry p {
   margin: 0.28rem 0 0;
   color: #e8f6f8;
@@ -424,6 +797,9 @@ button:disabled {
 }
 
 .log-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
   color: var(--muted);
   font-size: 0.72rem;
   text-transform: uppercase;

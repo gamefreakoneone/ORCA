@@ -5,7 +5,11 @@ import {
   Robot,
   RobotState,
   WorldState,
-  ZONE_SIZE
+  ZONE_SIZE,
+  BATTERY_DRAIN_MOVE,
+  BATTERY_DRAIN_COLLECT,
+  MAX_BATTERY,
+  totalMinerals
 } from "./worldModel";
 
 const ARRIVAL_THRESHOLD = 0.85;
@@ -26,7 +30,8 @@ function moveTowards(robot: Robot, targetX: number, targetZ: number, dtMs: numbe
   return {
     ...robot,
     x: clampToField(robot.x + dx * ratio),
-    z: clampToField(robot.z + dz * ratio)
+    z: clampToField(robot.z + dz * ratio),
+    battery: Math.max(0, robot.battery - BATTERY_DRAIN_MOVE)
   };
 }
 
@@ -41,7 +46,36 @@ function clearClaim(world: WorldState, zoneId: string | null, robotId: string): 
   }
 }
 
+function zoneBlockedByFish(world: WorldState, zoneId: string | null, robotId: string): boolean {
+  if (!zoneId) return false;
+  const zone = world.zones.find((z) => z.id === zoneId);
+  if (!zone) return false;
+  if (zone.animals <= 0) return false;
+  // If the robot is already inside (claimed), it's not blocked
+  if (zone.claimedBy === robotId) return false;
+  return true;
+}
+
+function getNextPlanTarget(world: WorldState, robot: Robot): string | null {
+  // Follow the per-sub plan from Claude
+  for (let i = robot.planIndex; i < robot.assignedPlan.length; i++) {
+    const zoneId = robot.assignedPlan[i];
+    const zone = getZoneById(world, zoneId);
+    if (!zone) continue;
+    if (zone.status === "avoid") continue;
+    if (totalMinerals(zone) <= 0 && zone.status === "depleted") continue;
+    if (zone.claimedBy && zone.claimedBy !== robot.id) continue;
+    return zoneId;
+  }
+  return null;
+}
+
 function findPatrolTarget(world: WorldState, robot: Robot): string | null {
+  // First, try the assigned plan
+  const planTarget = getNextPlanTarget(world, robot);
+  if (planTarget) return planTarget;
+
+  // Fallback: score-based patrol for unplanned zones
   const reserved = new Set(
     world.robots
       .filter((candidate) => candidate.id !== robot.id)
@@ -53,18 +87,21 @@ function findPatrolTarget(world: WorldState, robot: Robot): string | null {
   let bestScore = Number.NEGATIVE_INFINITY;
 
   for (const zone of world.zones) {
+    if (!zone.surveyed) continue;
     if (zone.animals >= 6 || zone.status === "avoid" || zone.claimedBy || zone.status === "depleted") {
       continue;
     }
+
+    if (totalMinerals(zone) <= 0) continue;
 
     if (reserved.has(zone.id)) {
       continue;
     }
 
     const distancePenalty = distance2D(robot.x, robot.z, zone.x, zone.z);
-    const unknownBonus = zone.status === "unknown" ? 5 : 0;
-    const mineralBonus = zone.minerals * 2;
-    const score = unknownBonus + mineralBonus - distancePenalty * 0.18;
+    const cobaltBonus = zone.cobalt * 6;
+    const manganeseBonus = zone.manganese * 2;
+    const score = cobaltBonus + manganeseBonus - distancePenalty * 0.18;
 
     if (score > bestScore) {
       bestScore = score;
@@ -75,7 +112,21 @@ function findPatrolTarget(world: WorldState, robot: Robot): string | null {
   return bestId;
 }
 
-function updateIdleRobot(_world: WorldState, robot: Robot): Robot {
+function updateIdleRobot(world: WorldState, robot: Robot): Robot {
+  // Battery exhausted — must return to base
+  if (robot.battery <= 0 && robot.state !== "recharging") {
+    return {
+      ...robot,
+      state: "returning",
+      targetZone: null
+    };
+  }
+
+  // Recharging
+  if (robot.state === "recharging") {
+    return { ...robot, state: "idle" };
+  }
+
   if (robot.cargo >= RETURN_CARGO_THRESHOLD) {
     return {
       ...robot,
@@ -91,6 +142,16 @@ function updateIdleRobot(_world: WorldState, robot: Robot): Robot {
     };
   }
 
+  // Try to find a target from the plan or via scoring
+  const target = findPatrolTarget(world, robot);
+  if (target) {
+    return {
+      ...robot,
+      state: "moving_to_target",
+      targetZone: target
+    };
+  }
+
   return {
     ...robot,
     state: "patrol"
@@ -98,6 +159,10 @@ function updateIdleRobot(_world: WorldState, robot: Robot): Robot {
 }
 
 function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot {
+  if (robot.battery <= 0) {
+    return { ...robot, state: "returning", targetZone: null };
+  }
+
   let targetZone = getZoneById(world, robot.targetZone);
 
   if (!targetZone || targetZone.status === "avoid" || targetZone.claimedBy) {
@@ -121,6 +186,14 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
     return robot;
   }
 
+  // Fish blocking — can't enter
+  if (zoneBlockedByFish(world, targetZone.id, robot.id)) {
+    return {
+      ...robot,
+      state: "waiting"
+    };
+  }
+
   const movedRobot = moveTowards(robot, targetZone.x, targetZone.z, dtMs);
   const arrived = distance2D(movedRobot.x, movedRobot.z, targetZone.x, targetZone.z) <= ARRIVAL_THRESHOLD;
 
@@ -136,7 +209,7 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
     };
   }
 
-  if (targetZone.minerals > 0 && !targetZone.claimedBy) {
+  if (totalMinerals(targetZone) > 0 && !targetZone.claimedBy) {
     targetZone.claimedBy = robot.id;
     targetZone.status = "mine";
     return {
@@ -145,7 +218,7 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
     };
   }
 
-  if (targetZone.minerals === 0) {
+  if (totalMinerals(targetZone) === 0) {
     targetZone.status = "depleted";
   }
 
@@ -157,6 +230,11 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
 }
 
 function updateMovingRobot(world: WorldState, robot: Robot, dtMs: number): Robot {
+  if (robot.battery <= 0) {
+    clearClaim(world, robot.targetZone, robot.id);
+    return { ...robot, state: "returning", targetZone: null };
+  }
+
   const targetZone = getZoneById(world, robot.targetZone);
   if (!targetZone) {
     return {
@@ -172,6 +250,14 @@ function updateMovingRobot(world: WorldState, robot: Robot, dtMs: number): Robot
     return {
       ...robot,
       state: "avoiding"
+    };
+  }
+
+  // Fish blocking — wait outside
+  if (zoneBlockedByFish(world, targetZone.id, robot.id)) {
+    return {
+      ...robot,
+      state: "waiting"
     };
   }
 
@@ -216,39 +302,83 @@ function updateCollectingRobot(world: WorldState, robot: Robot): Robot {
     };
   }
 
-  if (robot.cargo >= RETURN_CARGO_THRESHOLD) {
+  // Battery exhausted while collecting — drop everything and return
+  const newBattery = Math.max(0, robot.battery - BATTERY_DRAIN_COLLECT);
+  if (newBattery <= 0) {
     clearClaim(world, targetZone.id, robot.id);
     return {
       ...robot,
+      battery: 0,
       state: "returning",
       targetZone: null
     };
   }
 
-  if (targetZone.minerals <= 0) {
-    targetZone.claimedBy = null;
-    targetZone.status = "depleted";
+  if (robot.cargo >= RETURN_CARGO_THRESHOLD) {
+    clearClaim(world, targetZone.id, robot.id);
     return {
       ...robot,
+      battery: newBattery,
+      state: "returning",
+      targetZone: null
+    };
+  }
+
+  if (totalMinerals(targetZone) <= 0) {
+    targetZone.claimedBy = null;
+    targetZone.status = "depleted";
+
+    // Advance plan index if this was a planned zone
+    let planIndex = robot.planIndex;
+    if (robot.assignedPlan[planIndex] === targetZone.id) {
+      planIndex += 1;
+    }
+
+    return {
+      ...robot,
+      battery: newBattery,
       targetZone: null,
-      state: "idle"
+      state: "idle",
+      planIndex
     };
   }
 
   targetZone.claimedBy = robot.id;
   targetZone.status = "mine";
-  targetZone.minerals -= 1;
-  const cargo = Math.min(robot.maxCargo, robot.cargo + 1);
-  world.collectedTotal += 1;
 
-  if (targetZone.minerals === 0) {
+  // Collect: prioritize cobalt first
+  let collectedCobalt = 0;
+  let collectedManganese = 0;
+  if (targetZone.cobalt > 0) {
+    targetZone.cobalt -= 1;
+    collectedCobalt = 1;
+  } else if (targetZone.manganese > 0) {
+    targetZone.manganese -= 1;
+    collectedManganese = 1;
+  }
+
+  world.collectedCobalt += collectedCobalt;
+  world.collectedManganese += collectedManganese;
+  world.collectedTotal += collectedCobalt + collectedManganese;
+
+  const cargo = Math.min(robot.maxCargo, robot.cargo + 1);
+
+  if (totalMinerals(targetZone) === 0) {
     targetZone.claimedBy = null;
     targetZone.status = "depleted";
+
+    let planIndex = robot.planIndex;
+    if (robot.assignedPlan[planIndex] === targetZone.id) {
+      planIndex += 1;
+    }
+
     return {
       ...robot,
       cargo,
+      battery: newBattery,
       targetZone: null,
-      state: cargo >= RETURN_CARGO_THRESHOLD ? "returning" : "idle"
+      state: cargo >= RETURN_CARGO_THRESHOLD ? "returning" : "idle",
+      planIndex
     };
   }
 
@@ -257,6 +387,7 @@ function updateCollectingRobot(world: WorldState, robot: Robot): Robot {
     return {
       ...robot,
       cargo,
+      battery: newBattery,
       targetZone: null,
       state: "returning"
     };
@@ -264,12 +395,29 @@ function updateCollectingRobot(world: WorldState, robot: Robot): Robot {
 
   return {
     ...robot,
-    cargo
+    cargo,
+    battery: newBattery
   };
 }
 
 function updateReturningRobot(world: WorldState, robot: Robot, dtMs: number): Robot {
-  const movedRobot = moveTowards(robot, world.homeBase.x, world.homeBase.z, dtMs);
+  // Don't drain battery on return trip if already exhausted
+  const movedRobot = robot.battery <= 0
+    ? (() => {
+        const dx = world.homeBase.x - robot.x;
+        const dz = world.homeBase.z - robot.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist === 0) return robot;
+        const maxStep = (robot.speed * 0.5 * dtMs) / 1000; // slower crawl back
+        const ratio = Math.min(1, maxStep / dist);
+        return {
+          ...robot,
+          x: clampToField(robot.x + dx * ratio),
+          z: clampToField(robot.z + dz * ratio)
+        };
+      })()
+    : moveTowards(robot, world.homeBase.x, world.homeBase.z, dtMs);
+
   const arrived =
     distance2D(movedRobot.x, movedRobot.z, world.homeBase.x, world.homeBase.z) <= ARRIVAL_THRESHOLD + ZONE_SIZE * 0.15;
 
@@ -277,10 +425,13 @@ function updateReturningRobot(world: WorldState, robot: Robot, dtMs: number): Ro
     return movedRobot;
   }
 
+  // Arrived at base — unload cargo
+  const wasExhausted = movedRobot.battery <= 0;
   return {
     ...movedRobot,
     cargo: 0,
-    state: "idle",
+    battery: wasExhausted ? MAX_BATTERY : movedRobot.battery,
+    state: wasExhausted ? "recharging" : "idle",
     targetZone: null
   };
 }
@@ -298,18 +449,54 @@ function updateAvoidingRobot(world: WorldState, robot: Robot, dtMs: number): Rob
   };
 }
 
+function updateWaitingRobot(world: WorldState, robot: Robot): Robot {
+  if (robot.battery <= 0) {
+    return { ...robot, state: "returning", targetZone: null };
+  }
+
+  // Check if the target zone's fish have dispersed
+  if (robot.targetZone) {
+    const zone = getZoneById(world, robot.targetZone);
+    if (zone && zone.animals <= 0) {
+      // Fish gone — resume entry
+      return {
+        ...robot,
+        state: "moving_to_target"
+      };
+    }
+  }
+
+  // Still waiting
+  return robot;
+}
+
+function updateRechargingRobot(_world: WorldState, robot: Robot): Robot {
+  // Instant recharge — battery was set to MAX on arrival
+  return {
+    ...robot,
+    state: "idle"
+  };
+}
+
 function updateRobot(
   world: WorldState,
   robot: Robot,
   dtMs: number
 ): Robot {
+  // Only update workers in mining phase
+  if (robot.role !== "worker") return robot;
+  if (world.missionPhase !== "mining") return robot;
+
   const handlerMap: Record<RobotState, (worldArg: WorldState, robotArg: Robot, dtArg: number) => Robot> = {
     idle: (worldArg, robotArg) => updateIdleRobot(worldArg, robotArg),
     patrol: updatePatrolRobot,
     moving_to_target: updateMovingRobot,
     collecting: (worldArg, robotArg) => updateCollectingRobot(worldArg, robotArg),
     returning: updateReturningRobot,
-    avoiding: updateAvoidingRobot
+    avoiding: updateAvoidingRobot,
+    waiting: (worldArg, robotArg) => updateWaitingRobot(worldArg, robotArg),
+    surveying: (_w, r) => r, // workers don't survey
+    recharging: (worldArg, robotArg) => updateRechargingRobot(worldArg, robotArg)
   };
 
   return handlerMap[robot.state](world, robot, dtMs);
@@ -319,16 +506,16 @@ export function runRobotFSM(world: WorldState, dtMs: number): WorldState {
   const next = {
     ...world,
     zones: world.zones.map((zone) => ({ ...zone })),
-    robots: world.robots.map((robot) => ({ ...robot }))
+    robots: world.robots.map((robot) => ({ ...robot, assignedPlan: [...robot.assignedPlan] }))
   };
 
   next.robots = next.robots.map((robot) => updateRobot(next, robot, dtMs));
 
   next.zones = next.zones.map((zone) => {
-    if (zone.minerals === 0 && zone.status === "mine") {
+    if (totalMinerals(zone) === 0 && zone.status === "mine") {
       return {
         ...zone,
-        status: "depleted",
+        status: "depleted" as const,
         claimedBy: null
       };
     }

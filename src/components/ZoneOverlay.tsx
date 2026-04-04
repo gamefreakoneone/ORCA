@@ -1,61 +1,86 @@
-import { ThreeEvent } from "@react-three/fiber";
-import { Zone, ZONE_SIZE } from "../simulation/worldModel";
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+import { Zone, ZONE_SIZE, totalMinerals } from "../simulation/worldModel";
 
-interface ZoneOverlayProps {
+const STATUS_COLORS: Record<string, string> = {
+  unknown: "#334455",
+  mine: "#22aa44",
+  avoid: "#cc2222",
+  depleted: "#444444",
+  surveyed: "#2266aa"
+};
+
+export default function ZoneOverlay({
+  zone,
+  interactive,
+  onClick
+}: {
   zone: Zone;
   interactive: boolean;
   onClick: (zoneId: string) => void;
-}
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
 
-function getOverlayColor(zone: Zone): string {
-  if (zone.status === "avoid") {
-    return "#ff5a45";
-  }
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+    const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+    const t = clock.getElapsedTime();
 
-  if (zone.status === "mine") {
-    return "#4adf83";
-  }
-
-  if (zone.status === "depleted") {
-    return "#5b6776";
-  }
-
-  return "#9bb8c4";
-}
-
-function getOverlayOpacity(zone: Zone): number {
-  if (zone.status === "avoid") {
-    return 0.3;
-  }
-
-  if (zone.status === "mine") {
-    return 0.18;
-  }
-
-  if (zone.status === "depleted") {
-    return 0.16;
-  }
-
-  return 0.08;
-}
-
-export default function ZoneOverlay({ zone, interactive, onClick }: ZoneOverlayProps) {
-  const handleClick = (event: ThreeEvent<MouseEvent>) => {
-    event.stopPropagation();
-    if (interactive) {
-      onClick(zone.id);
+    // Fog-of-war for unsurveyed zones
+    if (!zone.surveyed && zone.status === "unknown") {
+      mat.opacity = 0.35 + Math.sin(t * 0.8 + zone.x * 0.3) * 0.05;
+      mat.color.set("#1a2a3a");
+      return;
     }
-  };
+
+    // Surveyed pulse
+    if (zone.status === "surveyed" && totalMinerals(zone) === 0 && zone.animals === 0) {
+      mat.opacity = 0.12;
+      mat.color.set("#2266aa");
+      return;
+    }
+
+    // Fish-blocked warning pulse
+    if (zone.animals > 0 && zone.animals < 6 && zone.status !== "avoid") {
+      mat.opacity = 0.2 + Math.sin(t * 3) * 0.08;
+      mat.color.set("#ddaa22");
+      return;
+    }
+
+    const baseColor = STATUS_COLORS[zone.status] || STATUS_COLORS.unknown;
+    mat.color.set(baseColor);
+
+    if (zone.status === "mine") {
+      mat.opacity = 0.25 + Math.sin(t * 2.5) * 0.08;
+    } else if (zone.status === "avoid") {
+      mat.opacity = 0.3 + Math.sin(t * 3.5) * 0.1;
+    } else {
+      mat.opacity = 0.15;
+    }
+  });
+
+  const baseOpacity = zone.surveyed ? 0.15 : 0.35;
+  const baseColor = !zone.surveyed ? "#1a2a3a" : (STATUS_COLORS[zone.status] || STATUS_COLORS.unknown);
 
   return (
     <mesh
+      ref={meshRef}
+      position={[zone.x, 0.02, zone.z]}
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[zone.x, 0.04, zone.z]}
-      onClick={handleClick}
-      receiveShadow
+      onClick={(e) => {
+        e.stopPropagation();
+        if (interactive) onClick(zone.id);
+      }}
     >
       <planeGeometry args={[ZONE_SIZE * 0.92, ZONE_SIZE * 0.92]} />
-      <meshStandardMaterial color={getOverlayColor(zone)} transparent opacity={getOverlayOpacity(zone)} />
+      <meshStandardMaterial
+        color={baseColor}
+        transparent
+        opacity={baseOpacity}
+        side={THREE.DoubleSide}
+        depthWrite={false}
+      />
     </mesh>
   );
 }

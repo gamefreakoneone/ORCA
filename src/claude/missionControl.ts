@@ -1,39 +1,76 @@
-import { MissionControlResponse, MissionControlResult } from "./schemas";
-import { ClaudeWorldSummary } from "../simulation/worldModel";
+import {
+  StrategicPlanResponse,
+  StrategicPlanResult,
+  ReallocationResponse,
+  ReallocationResult
+} from "./schemas";
+import {
+  ClaudeWorldSummary,
+  WORKER_COUNT
+} from "../simulation/worldModel";
 
-const SYSTEM_PROMPT = `You are the mission control AI for an underwater mining swarm. You coordinate 3-5 autonomous submarines collecting polymetallic nodules from the ocean floor while protecting marine life.
+const STRATEGIC_PLANNER_PROMPT = `You are the strategic mining planner for an underwater swarm operation.
 
-You receive a world state summary every few seconds. You return JSON commands to coordinate the swarm.
+A geologist robot has completed a survey of the entire ocean floor grid. You will receive the full survey data showing:
+- Each zone's COBALT count (high-value, worth 3x points) and MANGANESE count (low-value, worth 1x points)
+- Current fish/wildlife presence in each zone
+- Zone coordinates (x, z)
+
+You have ${WORKER_COUNT} worker robots to deploy. Each worker has a battery (100%) that drains during movement and collection. Workers only return to base when battery is FULLY EXHAUSTED (0%).
+
+Create an optimal mining plan. Each submarine gets its OWN individual plan — an ordered list of zones to visit.
 
 RULES:
-1. NEVER send a robot to a zone with animals >= 6. Mark those zones as "avoid".
-2. If a zone has minerals >= 7 and animals <= 3, it is high-value. Assign 2-3 robots to nearby zones to assist.
-3. If a robot's cargo >= 4 (of max 5), order it to return to base.
-4. Never assign two robots to the same zone (check claimedBy).
-5. Prioritize zones with highest mineral density first.
-6. If no good targets remain, set robots to patrol unexplored ("unknown") zones.
-7. Keep robots spread out — avoid clustering unless assisting a rich area.
+1. Prioritize zones with COBALT — they are 3x more valuable than manganese.
+2. NEVER send workers to zones with animals >= 6 (add those to ignore_zones).
+3. Send multiple workers to adjacent high-value zones to create efficient mining clusters.
+4. Ignore zones with fewer than 2 total minerals (not worth the battery cost).
+5. Plan efficient route orders — each robot's target_zones should form a geographically logical path to minimize battery waste on travel.
+6. Fish can migrate — note zones near current fish as risky but don't avoid entirely if valuable.
+7. Workers drain to 0% battery then MUST return — plan routes so they don't strand far from base. Put nearer zones later in the route so the return trip is shorter.
+8. Each zone can contain BOTH cobalt AND manganese AND fish simultaneously.
+9. Coordinate the robots — don't send two workers to the same zone. Spread them across different high-value areas.
 
-Return ONLY a JSON object with this exact schema:
+Return ONLY a JSON object with this schema:
 {
-  "assignments": [
+  "deployment": [
     {
       "robot_id": "sub_1",
-      "action": "move_to_target" | "return_to_base" | "patrol" | "avoid_zone" | "hold",
-      "target_zone": "zone_3_4" | null,
-      "reason": "short explanation"
+      "target_zones": ["zone_4_3", "zone_4_4", "zone_5_3"],
+      "priority": "high",
+      "reason": "Rich cobalt deposit cluster in sectors 4-3 through 5-3"
     }
   ],
-  "zone_updates": [
+  "ignore_zones": ["zone_6_3"],
+  "alerts": ["Strategic note: main cobalt vein in eastern sectors"]
+}`;
+
+const REALLOCATION_PROMPT = `You are the mission control AI for an underwater mining swarm.
+
+Some worker robots have become IDLE (finished their assigned zones or just recharged). There are still minerals remaining on the grid. You need to issue NEW orders to the idle robots.
+
+Current situation:
+- Some robots may be actively mining (do NOT reassign them)
+- Some robots may be recharging at base (they will need orders when ready)
+- Fish may have migrated since the original plan
+
+Issue orders ONLY for idle/available robots. Consider:
+1. Send idle workers to zones with remaining cobalt first (3x value)
+2. Don't conflict with robots already mining a zone
+3. If a zone has animals >= 6, mark it as avoid
+4. Plan efficient routes from the robot's current position
+
+Return ONLY a JSON object:
+{
+  "orders": [
     {
-      "zone_id": "zone_5_2",
-      "new_status": "avoid" | "mine",
-      "reason": "short explanation"
+      "robot_id": "sub_1",
+      "action": "move_to_target",
+      "target_zone": "zone_2_6",
+      "reason": "Remaining manganese deposit, closest to current position"
     }
   ],
-  "alerts": [
-    "Free text alert for the mission log, e.g. 'Rich deposit found in sector 3-4, dispatching reinforcements'"
-  ]
+  "alerts": ["Redirecting sub_1 to mop up remaining deposits"]
 }`;
 
 interface AnthropicTextBlock {
@@ -84,19 +121,19 @@ function extractFirstJsonObject(text: string): string | null {
   return null;
 }
 
-function isMissionControlResponse(value: unknown): value is MissionControlResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
+function isStrategicPlanResponse(value: unknown): value is StrategicPlanResponse {
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  return Array.isArray(candidate.assignments) && Array.isArray(candidate.zone_updates) && Array.isArray(candidate.alerts);
+  return Array.isArray(candidate.deployment) && Array.isArray(candidate.ignore_zones) && Array.isArray(candidate.alerts);
 }
 
-export async function requestMissionControl(
-  worldSummary: ClaudeWorldSummary,
-  apiKey: string
-): Promise<MissionControlResult> {
+function isReallocationResponse(value: unknown): value is ReallocationResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return Array.isArray(candidate.orders) && Array.isArray(candidate.alerts);
+}
+
+async function callClaude(systemPrompt: string, userContent: string, apiKey: string): Promise<{ text: string } | { error: string }> {
   const trimmedApiKey = apiKey.trim();
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -115,14 +152,14 @@ export async function requestMissionControl(
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: JSON.stringify(worldSummary)
+                text: userContent
               }
             ]
           }
@@ -134,13 +171,9 @@ export async function requestMissionControl(
       const errorText = await response.text();
       const authHint =
         response.status === 401 || response.status === 403
-          ? " Add a valid Anthropic API key in the sidebar for local browser demos."
+          ? " Add a valid Anthropic API key in the sidebar."
           : "";
-      return {
-        ok: false,
-        error: `Mission control request failed with ${response.status}.${authHint}`,
-        rawText: errorText
-      };
+      return { error: `Request failed with ${response.status}.${authHint} ${errorText.slice(0, 200)}` };
     }
 
     const data = (await response.json()) as AnthropicResponse;
@@ -149,33 +182,68 @@ export async function requestMissionControl(
       .map((block) => block.text ?? "")
       .join("\n");
 
-    const jsonText = extractFirstJsonObject(text);
-    if (!jsonText) {
-      return {
-        ok: false,
-        error: "Mission control did not return a JSON object.",
-        rawText: text
-      };
-    }
-
-    const parsed = JSON.parse(jsonText) as unknown;
-    if (!isMissionControlResponse(parsed)) {
-      return {
-        ok: false,
-        error: "Mission control returned JSON with the wrong shape.",
-        rawText: jsonText
-      };
-    }
-
-    return {
-      ok: true,
-      command: parsed,
-      rawText: jsonText
-    };
+    return { text };
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Unknown mission-control error."
-    };
+    return { error: error instanceof Error ? error.message : "Unknown error." };
+  }
+}
+
+export async function requestStrategicPlan(
+  worldSummary: ClaudeWorldSummary,
+  apiKey: string
+): Promise<StrategicPlanResult> {
+  const result = await callClaude(
+    STRATEGIC_PLANNER_PROMPT,
+    JSON.stringify(worldSummary),
+    apiKey
+  );
+
+  if ("error" in result) {
+    return { ok: false, error: result.error };
+  }
+
+  const jsonText = extractFirstJsonObject(result.text);
+  if (!jsonText) {
+    return { ok: false, error: "Claude did not return a JSON object.", rawText: result.text };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (!isStrategicPlanResponse(parsed)) {
+      return { ok: false, error: "Claude returned JSON with wrong shape.", rawText: jsonText };
+    }
+    return { ok: true, plan: parsed, rawText: jsonText };
+  } catch {
+    return { ok: false, error: "Failed to parse JSON response.", rawText: jsonText };
+  }
+}
+
+export async function requestReallocation(
+  worldSummary: ClaudeWorldSummary,
+  apiKey: string
+): Promise<ReallocationResult> {
+  const result = await callClaude(
+    REALLOCATION_PROMPT,
+    JSON.stringify(worldSummary),
+    apiKey
+  );
+
+  if ("error" in result) {
+    return { ok: false, error: result.error };
+  }
+
+  const jsonText = extractFirstJsonObject(result.text);
+  if (!jsonText) {
+    return { ok: false, error: "Claude did not return a JSON object.", rawText: result.text };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (!isReallocationResponse(parsed)) {
+      return { ok: false, error: "Claude returned JSON with wrong shape.", rawText: jsonText };
+    }
+    return { ok: true, reallocation: parsed, rawText: jsonText };
+  } catch {
+    return { ok: false, error: "Failed to parse JSON response.", rawText: jsonText };
   }
 }

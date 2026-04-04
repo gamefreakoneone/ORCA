@@ -3,6 +3,7 @@ import EditorControls from "./EditorControls";
 import MissionDashboard from "./MissionDashboard";
 import CommandLog from "./CommandLog";
 import MissionSummary from "./MissionSummary";
+import MiningPlanDisplay from "./MiningPlanDisplay";
 
 interface ControlPanelProps {
   world: WorldState;
@@ -30,23 +31,23 @@ export default function ControlPanel({
   const showSummary = world.missionStatus === "completed" || world.missionStatus === "stopped";
   const latestMissionControlMessage = [...world.missionLog]
     .reverse()
-    .find((entry) => entry.message.toLowerCase().includes("mission control"));
+    .find((entry) => entry.message.toLowerCase().includes("mission control") || entry.message.toLowerCase().includes("failed"));
 
   return (
     <aside className="control-panel">
       <header className="panel-hero">
-        <p className="eyebrow">Ecology-aware mining swarm</p>
+        <p className="eyebrow">Multi-Phase Autonomous Mining Swarm</p>
         <h1>AquaSwarm</h1>
         <p className="muted-copy">
-          Autonomous underwater robots collect nodules, dodge wildlife, and surface Claude&apos;s
-          strategic calls in real time.
+          A geologist scouts the ocean floor, Claude plans the strategy, and worker
+          submarines mine cobalt &amp; manganese while dodging migratory fish schools.
         </p>
       </header>
 
       <section className="panel-section">
         <div className="section-header">
           <span>Mission Control Link</span>
-          <span className="section-pill">Optional</span>
+          <span className="section-pill">Required</span>
         </div>
         <label className="input-label" htmlFor="anthropicKey">
           Anthropic API key
@@ -55,12 +56,13 @@ export default function ControlPanel({
           id="anthropicKey"
           className="text-input"
           onChange={(event) => onApiKeyChange(event.target.value)}
-          placeholder="Paste key for local browser demos"
+          placeholder="Paste key for Claude strategic planning"
           type="password"
           value={apiKey}
         />
         <p className="muted-copy">
-          Local autonomy keeps running even if mission-control requests fail or stay pending.
+          Claude is called after the geologist survey to create a strategic mining plan,
+          and again when workers need reallocation.
         </p>
         {world.apiStatus === "error" && latestMissionControlMessage ? (
           <div className="status-message error">
@@ -70,8 +72,8 @@ export default function ControlPanel({
         ) : null}
         {world.apiStatus !== "error" && !apiKey.trim() ? (
           <div className="status-message info">
-            <strong>Local demo note</strong>
-            <p>Paste an Anthropic API key here if you want Claude mission-control calls to work in a normal browser session.</p>
+            <strong>API key needed</strong>
+            <p>Paste an Anthropic API key to enable Claude&apos;s strategic planning. The geologist survey runs without it.</p>
           </div>
         ) : null}
         {world.missionStatus === "running" ? (
@@ -93,6 +95,7 @@ export default function ControlPanel({
       ) : null}
 
       <MissionDashboard world={world} />
+      <MiningPlanDisplay plan={world.miningPlan} />
       <CommandLog log={world.missionLog} />
       {showSummary ? <MissionSummary world={world} /> : null}
     </aside>

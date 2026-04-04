@@ -8,7 +8,7 @@ export default function CommandLog({ log }: CommandLogProps) {
   return (
     <section className="panel-section command-log-section">
       <div className="section-header">
-        <span>Claude Command Log</span>
+        <span>Mission Log</span>
         <span className="section-pill">Visible</span>
       </div>
       <div className="command-log">
