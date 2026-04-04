@@ -13,26 +13,25 @@ The core demo loop is implemented and builds successfully with `npm run build`.
 - Split-screen layout with 3D viewport and right-side control panel
 
 ### Simulation layer
-- `WorldState`, `Zone`, `Robot`, and `LogEntry` types
-- Grid-based world generation and home base placement
-- Demo scenario loader
-- Editor-mode zone toggling for minerals and animals
-- Mission start, stop, reset, and completion checks
+- **World Constants**: 8x8 grid of 6m² zones; 4 robots with max cargo of 5; 200ms simulation ticks.
+- **Claude Polling**: Remote mission control is queried every 6 seconds (`6000ms`) to minimize API overhead and allow local autonomy.
+- **World State**: Tracks zones (minerals, animals, status, claims), robots (position, cargo, speed), and a rolling mission log.
+- **Editor Mode**: Allows cycling minerals (`0, 3, 6, 9`) and animals (`0, 2, 5, 8`) to stage different scenarios.
+- **Mission Lifecycle**: Includes `editing`, `running`, `completed`, and `stopped` phases with a dedicated "Demo Scenario" loader.
 
 ### Robot behavior
-- Finite-state machine for `idle`, `patrol`, `moving_to_target`, `collecting`, `returning`, and `avoiding`
-- Straight-line movement toward targets and home base
-- Cargo collection and return-to-base behavior
-- Claimed-zone handling to reduce duplicate assignments
-- Simple repulsion-based collision avoidance
+- **Finite-state machine**: States include `idle`, `patrol`, `moving_to_target`, `collecting`, `returning`, and `avoiding`.
+- **Target Selection**: Non-assigned robots use a scoring heuristic: `(Unknown? 5 : 0) + (Minerals * 2) - (Distance * 0.18)`.
+- **Cargo Management**: Robots collect until `cargo >= 4`, then trigger a `returning` state to the home base.
+- **Collision Avoidance**: A `SEPARATION_THRESHOLD` of 2.6 units triggers a mutual-repulsion push to prevent overlaps.
+- **Arrival Logic**: A threshold of 0.85 units defines "arrival" at target zones.
 
 ### Claude mission control
-- Claude request/response schema types
-- Direct browser `fetch` integration targeting `https://api.anthropic.com/v1/messages`
-- System prompt and world-summary packaging
-- JSON extraction and safe parsing of Claude responses
-- Centralized application of assignments, zone updates, and alerts
-- Non-blocking polling so the sim continues when Claude is slow or unavailable
+- **Direct Anthropic Integration**: Uses `fetch` targeting `https://api.anthropic.com/v1/messages` with `anthropic-dangerous-direct-browser-access` enabled.
+- **System Prompting**: Enforces rules like "Avoid zones with >= 6 animals" and "Prioritize minerals >= 7 with <= 3 animals".
+- **State Synchronization**: Maps Claude's high-level `assignments` (move, return, patrol, avoid, hold) and `zone_updates` back to the local `WorldState`. Assignments from Claude override the local "Patrol" heuristic until the robot reaches its destination or is reassigned.
+- **JSON Resilience**: Includes a custom extractor to find and parse JSON blocks even if Claude includes conversational filler.
+- **Non-blocking Polling**: The simulation ticks independently at ~60fps while Claude requests happen asynchronously; if the API is slow, robots continue following their last assigned intent or fallback to autonomous patrolling.
 
 ### 3D presentation
 - Ocean floor plane and grid
