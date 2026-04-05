@@ -21,7 +21,7 @@ export const DOCKING_THRESHOLD = ARRIVAL_THRESHOLD + ZONE_SIZE * 0.15;
 // Fish migration
 export const FISH_MIGRATION_INTERVAL = 40;
 export const FISH_MIGRATION_CHANCE = 0.3;
-export const FISH_DISPERSE_NEAR_ROBOT_TICKS = 8;
+export const FISH_DISPERSE_NEAR_ROBOT_TICKS = 4;
 
 export type ZoneStatus = "unknown" | "mine" | "avoid" | "depleted" | "surveyed";
 export type RobotState =

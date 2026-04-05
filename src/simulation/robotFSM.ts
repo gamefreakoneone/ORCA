@@ -50,12 +50,21 @@ function clearClaim(world: WorldState, zoneId: string | null, robotId: string): 
 
 function zoneBlockedByFish(world: WorldState, zoneId: string | null, robotId: string): boolean {
   if (!zoneId) return false;
-  const zone = world.zones.find((z) => z.id === zoneId);
+  const zone = getZoneById(world, zoneId);
   if (!zone) return false;
   if (zone.animals <= 0) return false;
-  // If the robot is already inside (claimed), it's not blocked
   if (zone.claimedBy === robotId) return false;
-  return true;
+
+  if (zone.animals >= 6) return true;
+
+  const targetingRobots = world.robots.filter(
+    (r) => r.role === "worker" && r.targetZone === zoneId
+  );
+  
+  if (targetingRobots.length <= 1) return false;
+
+  const winner = targetingRobots.sort((a, b) => a.id.localeCompare(b.id))[0];
+  return winner.id !== robotId;
 }
 
 function getNextPlanTarget(world: WorldState, robot: Robot): string | null {
@@ -233,6 +242,13 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
     };
   }
 
+  if (targetZone.animals > 0) {
+    return {
+      ...movedRobot,
+      state: "waiting"
+    };
+  }
+
   if (totalMinerals(targetZone) > 0 && !targetZone.claimedBy) {
     targetZone.claimedBy = robot.id;
     targetZone.status = "mine";
@@ -298,6 +314,13 @@ function updateMovingRobot(world: WorldState, robot: Robot, dtMs: number): Robot
 
   if (!arrived) {
     return movedRobot;
+  }
+
+  if (targetZone.animals > 0) {
+    return {
+      ...movedRobot,
+      state: "waiting"
+    };
   }
 
   targetZone.claimedBy = robot.id;
@@ -477,19 +500,32 @@ function updateWaitingRobot(world: WorldState, robot: Robot): Robot {
     return { ...robot, state: "returning", targetZone: null };
   }
 
-  // Check if the target zone's fish have dispersed
   if (robot.targetZone) {
     const zone = getZoneById(world, robot.targetZone);
-    if (zone && zone.animals <= 0) {
-      // Fish gone — resume entry
-      return {
-        ...robot,
-        state: "moving_to_target"
-      };
+    if (!zone) return robot;
+
+    const arrived = distance2D(robot.x, robot.z, zone.x, zone.z) <= ARRIVAL_THRESHOLD;
+
+    if (arrived) {
+      if (zone.animals <= 0) {
+        return { ...robot, state: "moving_to_target" };
+      }
+      if (zone.animals >= 6) {
+        return { ...robot, state: "avoiding" };
+      }
+      
+      const nextBattery = Math.max(0, robot.battery - BATTERY_DRAIN_MOVE);
+      if (nextBattery <= 0) {
+        return { ...robot, battery: 0, state: "returning", targetZone: null };
+      }
+      return { ...robot, battery: nextBattery };
+    } else {
+      if (!zoneBlockedByFish(world, robot.targetZone, robot.id)) {
+        return { ...robot, state: "moving_to_target" };
+      }
     }
   }
 
-  // Still waiting
   return robot;
 }
 
