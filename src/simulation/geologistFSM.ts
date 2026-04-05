@@ -138,17 +138,17 @@ export function runGeologistFSM(world: WorldState, dtMs: number): WorldState {
     targetZone.status = "surveyed";
     next.surveyedCount += 1;
 
-    const hasCobalt = targetZone.cobalt > 0;
-    const hasManganese = targetZone.manganese > 0;
+    const hasHighYield = targetZone.highYield > 0;
+    const hasLowYield = targetZone.lowYield > 0;
     const hasAnimals = targetZone.animals > 0;
     const parts: string[] = [];
-    if (hasCobalt) parts.push(`Co:${targetZone.cobalt}`);
-    if (hasManganese) parts.push(`Mn:${targetZone.manganese}`);
+    if (hasHighYield) parts.push(`HY:${targetZone.highYield}`);
+    if (hasLowYield) parts.push(`LY:${targetZone.lowYield}`);
     if (hasAnimals) parts.push(`🐟:${targetZone.animals}`);
     const detail = parts.length > 0 ? parts.join(" ") : "empty";
 
     // Only log interesting zones to reduce noise
-    if (hasCobalt || hasManganese || hasAnimals) {
+    if (hasHighYield || hasLowYield || hasAnimals) {
       next = appendLog(next, {
         tick: next.tick,
         source: "geologist",

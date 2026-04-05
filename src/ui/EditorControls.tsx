@@ -17,8 +17,8 @@ export default function EditorControls({
   onReset,
   onSetEditorMode
 }: EditorControlsProps) {
-  const totalCobalt = world.zones.reduce((sum, z) => sum + z.cobalt, 0);
-  const totalManganese = world.zones.reduce((sum, z) => sum + z.manganese, 0);
+  const totalHighYield = world.zones.reduce((sum, z) => sum + z.highYield, 0);
+  const totalLowYield = world.zones.reduce((sum, z) => sum + z.lowYield, 0);
   const totalFish = world.zones.reduce((sum, z) => sum + z.animals, 0);
   const nonEmptyZones = world.zones.filter((z) => totalMinerals(z) > 0 || z.animals > 0).length;
 
@@ -31,18 +31,18 @@ export default function EditorControls({
 
       <div className="editor-toggle-group">
         <button
-          className={editorMode === "cobalt" ? "active cobalt-btn" : "cobalt-btn"}
-          onClick={() => onSetEditorMode("cobalt")}
+          className={editorMode === "highYield" ? "active high-yield-btn" : "high-yield-btn"}
+          onClick={() => onSetEditorMode("highYield")}
           type="button"
         >
-          ⬡ Cobalt
+          ⬡ High Yield
         </button>
         <button
-          className={editorMode === "manganese" ? "active manganese-btn" : "manganese-btn"}
-          onClick={() => onSetEditorMode("manganese")}
+          className={editorMode === "lowYield" ? "active low-yield-btn" : "low-yield-btn"}
+          onClick={() => onSetEditorMode("lowYield")}
           type="button"
         >
-          ● Manganese
+          ● Low Yield
         </button>
         <button
           className={editorMode === "animals" ? "active" : ""}
@@ -54,8 +54,8 @@ export default function EditorControls({
       </div>
 
       <div className="editor-stats">
-        <span className="stat-cobalt">Co: {totalCobalt}</span>
-        <span className="stat-manganese">Mn: {totalManganese}</span>
+        <span className="stat-high-yield">HY: {totalHighYield}</span>
+        <span className="stat-low-yield">LY: {totalLowYield}</span>
         <span className="stat-fish">🐟: {totalFish}</span>
         <span className="stat-zones">{nonEmptyZones} zones</span>
       </div>

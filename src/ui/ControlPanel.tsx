@@ -40,7 +40,7 @@ export default function ControlPanel({
         <h1>AquaSwarm</h1>
         <p className="muted-copy">
           A geologist scouts the ocean floor, Claude plans the strategy, and worker
-          submarines mine cobalt &amp; manganese while dodging migratory fish schools.
+          submarines mine high &amp; low yield ore while dodging migratory fish schools.
         </p>
       </header>
 

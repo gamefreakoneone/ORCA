@@ -53,17 +53,17 @@ export default function MissionDashboard({ world }: MissionDashboardProps) {
 
       {/* Mission totals */}
       <div className="mission-totals">
-        <div className="total-item cobalt-total">
-          <span className="total-label">Cobalt</span>
-          <span className="total-value">{world.collectedCobalt}</span>
+        <div className="total-item high-yield-total">
+          <span className="total-label">High Yield</span>
+          <span className="total-value">{world.collectedHighYield}</span>
         </div>
-        <div className="total-item manganese-total">
-          <span className="total-label">Manganese</span>
-          <span className="total-value">{world.collectedManganese}</span>
+        <div className="total-item low-yield-total">
+          <span className="total-label">Low Yield</span>
+          <span className="total-value">{world.collectedLowYield}</span>
         </div>
         <div className="total-item">
           <span className="total-label">Score</span>
-          <span className="total-value">{world.collectedCobalt * 3 + world.collectedManganese}</span>
+          <span className="total-value">{world.collectedHighYield * 3 + world.collectedLowYield}</span>
         </div>
         <div className="total-item">
           <span className="total-label">Avoided</span>

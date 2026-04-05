@@ -12,7 +12,7 @@ import {
 const STRATEGIC_PLANNER_PROMPT = `You are the strategic mining planner for an underwater swarm operation.
 
 A geologist robot has completed a survey of the entire ocean floor grid. You will receive the full survey data showing:
-- Each zone's COBALT count (high-value, worth 3x points) and MANGANESE count (low-value, worth 1x points)
+- Each zone's HIGH_YIELD ore count (high-value, worth 3x points) and LOW_YIELD ore count (low-value, worth 1x points)
 - Current fish/wildlife presence in each zone
 - Zone coordinates (x, z)
 
@@ -21,14 +21,14 @@ You have ${WORKER_COUNT} worker robots to deploy. Each worker has a battery (100
 Create an optimal mining plan. Each submarine gets its OWN individual plan — an ordered list of zones to visit.
 
 RULES:
-1. Prioritize zones with COBALT — they are 3x more valuable than manganese.
+1. Prioritize zones with HIGH_YIELD ore — they are 3x more valuable than LOW_YIELD ore.
 2. NEVER send workers to zones with animals >= 6 (add those to ignore_zones).
 3. Send multiple workers to adjacent high-value zones to create efficient mining clusters.
 4. Ignore zones with fewer than 2 total minerals (not worth the battery cost).
 5. Plan efficient route orders — each robot's target_zones should form a geographically logical path to minimize battery waste on travel.
 6. Fish can migrate — note zones near current fish as risky but don't avoid entirely if valuable.
 7. Workers drain to 0% battery then MUST return — plan routes so they don't strand far from base. Put nearer zones later in the route so the return trip is shorter.
-8. Each zone can contain BOTH cobalt AND manganese AND fish simultaneously.
+8. Each zone can contain BOTH high_yield AND low_yield ore AND fish simultaneously.
 9. Coordinate the robots — don't send two workers to the same zone. Spread them across different high-value areas.
 
 Return ONLY a JSON object with this schema:
@@ -38,11 +38,11 @@ Return ONLY a JSON object with this schema:
       "robot_id": "sub_1",
       "target_zones": ["zone_4_3", "zone_4_4", "zone_5_3"],
       "priority": "high",
-      "reason": "Rich cobalt deposit cluster in sectors 4-3 through 5-3"
+      "reason": "Rich high-yield deposit cluster in sectors 4-3 through 5-3"
     }
   ],
   "ignore_zones": ["zone_6_3"],
-  "alerts": ["Strategic note: main cobalt vein in eastern sectors"]
+  "alerts": ["Strategic note: main high-yield vein in eastern sectors"]
 }`;
 
 const REALLOCATION_PROMPT = `You are the mission control AI for an underwater mining swarm.
@@ -55,7 +55,7 @@ Current situation:
 - Fish may have migrated since the original plan
 
 Issue orders ONLY for idle/available robots. Consider:
-1. Send idle workers to zones with remaining cobalt first (3x value)
+1. Send idle workers to zones with remaining high_yield ore first (3x value)
 2. Don't conflict with robots already mining a zone
 3. If a zone has animals >= 6, mark it as avoid
 4. Plan efficient routes from the robot's current position
@@ -67,11 +67,12 @@ Return ONLY a JSON object:
       "robot_id": "sub_1",
       "action": "move_to_target",
       "target_zone": "zone_2_6",
-      "reason": "Remaining manganese deposit, closest to current position"
+      "reason": "Remaining low-yield deposit, closest to current position"
     }
   ],
   "alerts": ["Redirecting sub_1 to mop up remaining deposits"]
 }`;
+
 
 interface AnthropicTextBlock {
   type: string;

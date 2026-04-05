@@ -99,9 +99,9 @@ function findPatrolTarget(world: WorldState, robot: Robot): string | null {
     }
 
     const distancePenalty = distance2D(robot.x, robot.z, zone.x, zone.z);
-    const cobaltBonus = zone.cobalt * 6;
-    const manganeseBonus = zone.manganese * 2;
-    const score = cobaltBonus + manganeseBonus - distancePenalty * 0.18;
+    const highYieldBonus = zone.highYield * 6;
+    const lowYieldBonus = zone.lowYield * 2;
+    const score = highYieldBonus + lowYieldBonus - distancePenalty * 0.18;
 
     if (score > bestScore) {
       bestScore = score;
@@ -346,20 +346,20 @@ function updateCollectingRobot(world: WorldState, robot: Robot): Robot {
   targetZone.claimedBy = robot.id;
   targetZone.status = "mine";
 
-  // Collect: prioritize cobalt first
-  let collectedCobalt = 0;
-  let collectedManganese = 0;
-  if (targetZone.cobalt > 0) {
-    targetZone.cobalt -= 1;
-    collectedCobalt = 1;
-  } else if (targetZone.manganese > 0) {
-    targetZone.manganese -= 1;
-    collectedManganese = 1;
+  // Collect: prioritize high yield ore first
+  let collectedHigh = 0;
+  let collectedLow = 0;
+  if (targetZone.highYield > 0) {
+    targetZone.highYield -= 1;
+    collectedHigh = 1;
+  } else if (targetZone.lowYield > 0) {
+    targetZone.lowYield -= 1;
+    collectedLow = 1;
   }
 
-  world.collectedCobalt += collectedCobalt;
-  world.collectedManganese += collectedManganese;
-  world.collectedTotal += collectedCobalt + collectedManganese;
+  world.collectedHighYield += collectedHigh;
+  world.collectedLowYield += collectedLow;
+  world.collectedTotal += collectedHigh + collectedLow;
 
   const cargo = Math.min(robot.maxCargo, robot.cargo + 1);
 

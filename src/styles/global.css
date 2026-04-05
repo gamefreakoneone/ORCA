@@ -20,8 +20,8 @@
   --danger: #ff6f5d;
   --muted: #9ab5bf;
   --card-bg: rgba(17, 38, 49, 0.9);
-  --cobalt: #f5a623;
-  --manganese: #4ecdc4;
+  --high-yield: #f5a623;
+  --low-yield: #4ecdc4;
 }
 
 * {
@@ -286,16 +286,16 @@ button:disabled {
   color: var(--accent);
 }
 
-.editor-toggle-group button.cobalt-btn.active {
-  border-color: var(--cobalt);
+.editor-toggle-group button.high-yield-btn.active {
+  border-color: var(--high-yield);
   background: rgba(245, 166, 35, 0.18);
-  color: var(--cobalt);
+  color: var(--high-yield);
 }
 
-.editor-toggle-group button.manganese-btn.active {
-  border-color: var(--manganese);
+.editor-toggle-group button.low-yield-btn.active {
+  border-color: var(--low-yield);
   background: rgba(78, 205, 196, 0.18);
-  color: var(--manganese);
+  color: var(--low-yield);
 }
 
 .editor-stats {
@@ -305,13 +305,13 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-.stat-cobalt {
-  color: var(--cobalt);
+.stat-high-yield {
+  color: var(--high-yield);
   font-weight: 600;
 }
 
-.stat-manganese {
-  color: var(--manganese);
+.stat-low-yield {
+  color: var(--low-yield);
   font-weight: 600;
 }
 
@@ -454,12 +454,12 @@ button:disabled {
   font-weight: 700;
 }
 
-.cobalt-total .total-value {
-  color: var(--cobalt);
+.high-yield-total .total-value {
+  color: var(--high-yield);
 }
 
-.manganese-total .total-value {
-  color: var(--manganese);
+.low-yield-total .total-value {
+  color: var(--low-yield);
 }
 
 /* --- Robot cards --- */
@@ -587,11 +587,11 @@ button:disabled {
 }
 
 .plan-order.priority-high {
-  border-left-color: var(--cobalt);
+  border-left-color: var(--high-yield);
 }
 
 .plan-order.priority-medium {
-  border-left-color: var(--manganese);
+  border-left-color: var(--low-yield);
 }
 
 .plan-order.priority-low {
@@ -621,7 +621,7 @@ button:disabled {
 
 .priority-badge.priority-high {
   background: rgba(245, 166, 35, 0.2);
-  color: var(--cobalt);
+  color: var(--high-yield);
 }
 
 .priority-badge.priority-medium {
@@ -717,12 +717,12 @@ button:disabled {
   font-weight: 700;
 }
 
-.cobalt-value {
-  color: var(--cobalt);
+.high-yield-value {
+  color: var(--high-yield);
 }
 
-.manganese-value {
-  color: var(--manganese);
+.low-yield-value {
+  color: var(--low-yield);
 }
 
 .score-value {

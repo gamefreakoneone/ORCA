@@ -12,8 +12,8 @@ import {
   stopMission,
   summarizeWorldForClaude,
   toggleZoneAnimals,
-  toggleZoneCobalt,
-  toggleZoneManganese,
+  toggleZoneHighYield,
+  toggleZoneLowYield,
   appendLog
 } from "./simulation/worldModel";
 import {
@@ -27,7 +27,7 @@ import ControlPanel from "./ui/ControlPanel";
 
 export default function App() {
   const [world, setWorld] = useState<WorldState>(() => createInitialWorld());
-  const [editorMode, setEditorMode] = useState<EditorMode>("cobalt");
+  const [editorMode, setEditorMode] = useState<EditorMode>("highYield");
   const [apiKey, setApiKey] = useState("");
   const requestInFlight = useRef(false);
   const worldRef = useRef(world);
@@ -147,10 +147,10 @@ export default function App() {
 
     setWorld((currentWorld) => {
       switch (editorMode) {
-        case "cobalt":
-          return toggleZoneCobalt(currentWorld, zoneId);
-        case "manganese":
-          return toggleZoneManganese(currentWorld, zoneId);
+        case "highYield":
+          return toggleZoneHighYield(currentWorld, zoneId);
+        case "lowYield":
+          return toggleZoneLowYield(currentWorld, zoneId);
         case "animals":
           return toggleZoneAnimals(currentWorld, zoneId);
         default:

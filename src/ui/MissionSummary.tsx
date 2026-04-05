@@ -5,7 +5,7 @@ interface MissionSummaryProps {
 }
 
 export default function MissionSummary({ world }: MissionSummaryProps) {
-  const score = world.collectedCobalt * 3 + world.collectedManganese;
+  const score = world.collectedHighYield * 3 + world.collectedLowYield;
   const elapsed = (world.elapsedMs / 1000).toFixed(1);
 
   return (
@@ -19,12 +19,12 @@ export default function MissionSummary({ world }: MissionSummaryProps) {
 
       <div className="summary-grid">
         <div className="summary-item">
-          <span className="summary-label">Cobalt Extracted</span>
-          <span className="summary-value cobalt-value">{world.collectedCobalt}</span>
+          <span className="summary-label">High Yield Extracted</span>
+          <span className="summary-value high-yield-value">{world.collectedHighYield}</span>
         </div>
         <div className="summary-item">
-          <span className="summary-label">Manganese Extracted</span>
-          <span className="summary-value manganese-value">{world.collectedManganese}</span>
+          <span className="summary-label">Low Yield Extracted</span>
+          <span className="summary-value low-yield-value">{world.collectedLowYield}</span>
         </div>
         <div className="summary-item">
           <span className="summary-label">Total Score</span>

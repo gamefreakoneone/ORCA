@@ -7,8 +7,8 @@ export const TICK_MS = 200;
 export const CLAUDE_INTERVAL_MS = 6000;
 
 // Mineral editor cycles
-export const COBALT_CYCLE = [0, 2, 4, 6] as const;
-export const MANGANESE_CYCLE = [0, 3, 5, 8] as const;
+export const HIGH_YIELD_CYCLE = [0, 2, 4, 6] as const;
+export const LOW_YIELD_CYCLE = [0, 3, 5, 8] as const;
 export const ANIMAL_CYCLE = [0, 2, 5, 8] as const;
 
 // Battery
@@ -35,7 +35,7 @@ export type RobotState =
 export type MissionStatus = "editing" | "running" | "completed" | "stopped";
 export type MissionPhase = "scouting" | "planning" | "mining";
 export type LogSource = "claude" | "robot" | "system" | "geologist";
-export type EditorMode = "cobalt" | "manganese" | "animals";
+export type EditorMode = "highYield" | "lowYield" | "animals";
 export type ApiStatus = "idle" | "pending" | "error" | "ready";
 export type RobotRole = "geologist" | "worker";
 
@@ -43,8 +43,8 @@ export interface Zone {
   id: string;
   x: number;
   z: number;
-  cobalt: number;
-  manganese: number;
+  highYield: number;
+  lowYield: number;
   animals: number;
   status: ZoneStatus;
   claimedBy: string | null;
@@ -92,8 +92,8 @@ export interface WorldState {
   zones: Zone[];
   robots: Robot[];
   homeBase: { x: number; z: number };
-  collectedCobalt: number;
-  collectedManganese: number;
+  collectedHighYield: number;
+  collectedLowYield: number;
   collectedTotal: number;
   avoidedZones: number;
   missionLog: LogEntry[];
@@ -113,8 +113,8 @@ export interface ClaudeWorldSummary {
   tick: number;
   elapsed_ms: number;
   home_base: { x: number; z: number };
-  collected_cobalt: number;
-  collected_manganese: number;
+  collected_high_yield: number;
+  collected_low_yield: number;
   collected_total: number;
   avoided_zones: number;
   mission_phase: MissionPhase;
@@ -133,8 +133,8 @@ export interface ClaudeWorldSummary {
     id: string;
     x: number;
     z: number;
-    cobalt: number;
-    manganese: number;
+    high_yield: number;
+    low_yield: number;
     animals: number;
     status: ZoneStatus;
     claimed_by: string | null;
@@ -147,7 +147,7 @@ const HALF_GRID = ((GRID_SIZE - 1) * ZONE_SIZE) / 2;
 const BASE_START_X = -HALF_GRID;
 
 export function totalMinerals(zone: Zone): number {
-  return zone.cobalt + zone.manganese;
+  return zone.highYield + zone.lowYield;
 }
 
 export function zoneIdFromGrid(col: number, row: number): string {
@@ -183,8 +183,8 @@ export function createInitialZones(): Zone[] {
         id: zoneIdFromGrid(col, row),
         x: position.x,
         z: position.z,
-        cobalt: 0,
-        manganese: 0,
+        highYield: 0,
+        lowYield: 0,
         animals: 0,
         status: "unknown",
         claimedBy: null,
@@ -230,15 +230,15 @@ export function createInitialWorld(): WorldState {
     zones: createInitialZones(),
     robots: Array.from({ length: ROBOT_COUNT }, (_, index) => createRobot(index)),
     homeBase: createHomeBase(),
-    collectedCobalt: 0,
-    collectedManganese: 0,
+    collectedHighYield: 0,
+    collectedLowYield: 0,
     collectedTotal: 0,
     avoidedZones: 0,
     missionLog: [
       {
         tick: 0,
         source: "system",
-        message: "Mission editor ready. Place cobalt, manganese, mark wildlife, or load the demo scenario."
+        message: "Mission editor ready. Place High Yield ore, Low Yield ore, mark wildlife, or load the demo scenario."
       }
     ],
     missionStatus: "editing",
@@ -277,17 +277,17 @@ export function appendLog(world: WorldState, entry: LogEntry): WorldState {
   };
 }
 
-export function toggleZoneCobalt(world: WorldState, zoneId: string): WorldState {
+export function toggleZoneHighYield(world: WorldState, zoneId: string): WorldState {
   const next = cloneWorld(world);
   next.zones = next.zones.map((zone) => {
     if (zone.id !== zoneId) {
       return zone;
     }
 
-    const cobalt = cycleValue(zone.cobalt, COBALT_CYCLE);
+    const highYield = cycleValue(zone.highYield, HIGH_YIELD_CYCLE);
     return {
       ...zone,
-      cobalt,
+      highYield,
       status: zone.status === "depleted" ? "unknown" : zone.status,
       claimedBy: null
     };
@@ -296,17 +296,17 @@ export function toggleZoneCobalt(world: WorldState, zoneId: string): WorldState 
   return next;
 }
 
-export function toggleZoneManganese(world: WorldState, zoneId: string): WorldState {
+export function toggleZoneLowYield(world: WorldState, zoneId: string): WorldState {
   const next = cloneWorld(world);
   next.zones = next.zones.map((zone) => {
     if (zone.id !== zoneId) {
       return zone;
     }
 
-    const manganese = cycleValue(zone.manganese, MANGANESE_CYCLE);
+    const lowYield = cycleValue(zone.lowYield, LOW_YIELD_CYCLE);
     return {
       ...zone,
-      manganese,
+      lowYield,
       status: zone.status === "depleted" ? "unknown" : zone.status,
       claimedBy: null
     };
@@ -336,8 +336,8 @@ export function loadDemoScenario(): WorldState {
   const baseWorld = createInitialWorld();
   const next = cloneWorld(baseWorld);
 
-  // Cobalt deposits (high-value)
-  const cobaltZones = new Map<string, number>([
+  // High Yield Ore deposits
+  const highYieldZones = new Map<string, number>([
     [zoneIdFromGrid(4, 3), 6],
     [zoneIdFromGrid(4, 4), 4],
     [zoneIdFromGrid(5, 3), 4],
@@ -345,8 +345,8 @@ export function loadDemoScenario(): WorldState {
     [zoneIdFromGrid(2, 1), 2]
   ]);
 
-  // Manganese deposits (low-value)
-  const manganeseZones = new Map<string, number>([
+  // Low Yield Ore deposits
+  const lowYieldZones = new Map<string, number>([
     [zoneIdFromGrid(4, 3), 3],
     [zoneIdFromGrid(5, 3), 5],
     [zoneIdFromGrid(1, 5), 8],
@@ -366,8 +366,8 @@ export function loadDemoScenario(): WorldState {
 
   next.zones = next.zones.map((zone) => ({
     ...zone,
-    cobalt: cobaltZones.get(zone.id) ?? 0,
-    manganese: manganeseZones.get(zone.id) ?? 0,
+    highYield: highYieldZones.get(zone.id) ?? 0,
+    lowYield: lowYieldZones.get(zone.id) ?? 0,
     animals: animalZones.get(zone.id) ?? 0,
     status: "unknown",
     claimedBy: null,
@@ -383,7 +383,7 @@ export function loadDemoScenario(): WorldState {
       tick: 0,
       source: "system",
       message:
-        "Demo scenario loaded: cobalt & manganese deposits staged, wildlife zones active, multi-phase mission ready."
+        "Demo scenario loaded: High & Low Yield ore deposits staged, wildlife zones active, multi-phase mission ready."
     }
   );
 }
@@ -392,8 +392,8 @@ export function prepareWorldForMission(world: WorldState): WorldState {
   const next = cloneWorld(world);
   next.tick = 0;
   next.elapsedMs = 0;
-  next.collectedCobalt = 0;
-  next.collectedManganese = 0;
+  next.collectedHighYield = 0;
+  next.collectedLowYield = 0;
   next.collectedTotal = 0;
   next.collisionsPrevented = 0;
   next.lastClaudeAt = -CLAUDE_INTERVAL_MS;
@@ -444,7 +444,7 @@ export function resetWorld(): WorldState {
 
 export function checkMissionComplete(world: WorldState): boolean {
   if (world.missionPhase !== "mining") return false;
-  return world.zones.every((zone) => zone.cobalt === 0 && zone.manganese === 0);
+  return world.zones.every((zone) => zone.highYield === 0 && zone.lowYield === 0);
 }
 
 export function summarizeWorldForClaude(world: WorldState): ClaudeWorldSummary {
@@ -452,8 +452,8 @@ export function summarizeWorldForClaude(world: WorldState): ClaudeWorldSummary {
     tick: world.tick,
     elapsed_ms: world.elapsedMs,
     home_base: world.homeBase,
-    collected_cobalt: world.collectedCobalt,
-    collected_manganese: world.collectedManganese,
+    collected_high_yield: world.collectedHighYield,
+    collected_low_yield: world.collectedLowYield,
     collected_total: world.collectedTotal,
     avoided_zones: world.avoidedZones,
     mission_phase: world.missionPhase,
@@ -474,8 +474,8 @@ export function summarizeWorldForClaude(world: WorldState): ClaudeWorldSummary {
         id: zone.id,
         x: zone.x,
         z: zone.z,
-        cobalt: zone.cobalt,
-        manganese: zone.manganese,
+        high_yield: zone.highYield,
+        low_yield: zone.lowYield,
         animals: zone.animals,
         status: zone.status,
         claimed_by: zone.claimedBy,
@@ -518,5 +518,5 @@ export function getIdleWorkers(world: WorldState): Robot[] {
 }
 
 export function hasRemainingResources(world: WorldState): boolean {
-  return world.zones.some((z) => z.surveyed && (z.cobalt > 0 || z.manganese > 0) && z.status !== "avoid");
+  return world.zones.some((z) => z.surveyed && (z.highYield > 0 || z.lowYield > 0) && z.status !== "avoid");
 }
