@@ -15,6 +15,8 @@ export const ANIMAL_CYCLE = [0, 2, 5, 8] as const;
 export const MAX_BATTERY = 100;
 export const BATTERY_DRAIN_MOVE = 0.15;
 export const BATTERY_DRAIN_COLLECT = 0.3;
+export const ARRIVAL_THRESHOLD = 0.85;
+export const DOCKING_THRESHOLD = ARRIVAL_THRESHOLD + ZONE_SIZE * 0.15;
 
 // Fish migration
 export const FISH_MIGRATION_INTERVAL = 40;
@@ -519,4 +521,11 @@ export function getIdleWorkers(world: WorldState): Robot[] {
 
 export function hasRemainingResources(world: WorldState): boolean {
   return world.zones.some((z) => z.surveyed && (z.highYield > 0 || z.lowYield > 0) && z.status !== "avoid");
+}
+
+export function allWorkersAtBase(world: WorldState): boolean {
+  return getWorkers(world).every((robot) => {
+    const dist = distance2D(robot.x, robot.z, world.homeBase.x, world.homeBase.z);
+    return dist <= DOCKING_THRESHOLD;
+  });
 }

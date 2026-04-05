@@ -8,7 +8,8 @@ import {
   getWorkers,
   hasRemainingResources,
   totalMinerals,
-  getZoneById
+  getZoneById,
+  allWorkersAtBase
 } from "./worldModel";
 import { applyCollisionAvoidance } from "./collisionAvoidance";
 import { runRobotFSM } from "./robotFSM";
@@ -65,18 +66,30 @@ export function tickWorld(world: WorldState, dtMs: number): WorldState {
     };
 
     if (checkMissionComplete(next)) {
-      next = appendLog(
-        {
-          ...next,
-          missionStatus: "completed",
-          apiStatus: next.apiStatus === "pending" ? "ready" : next.apiStatus
-        },
-        {
-          tick: next.tick,
-          source: "system",
-          message: "Mission complete! All mineral deposits have been extracted. 🎉"
+      if (allWorkersAtBase(next)) {
+        next = appendLog(
+          {
+            ...next,
+            missionStatus: "completed",
+            apiStatus: next.apiStatus === "pending" ? "ready" : next.apiStatus
+          },
+          {
+            tick: next.tick,
+            source: "system",
+            message: "Mission complete! All mineral deposits extracted and all units docked. 🎉"
+          }
+        );
+      } else {
+        // Log "returning" once when it first happens
+        const alreadyLogged = next.missionLog.some(l => l.message.includes("returning to mothership"));
+        if (!alreadyLogged) {
+          next = appendLog(next, {
+            tick: next.tick,
+            source: "system",
+            message: "All mineral deposits extracted. Workers returning to mothership for docking..."
+          });
         }
-      );
+      }
     }
   }
 

@@ -9,10 +9,12 @@ import {
   BATTERY_DRAIN_MOVE,
   BATTERY_DRAIN_COLLECT,
   MAX_BATTERY,
-  totalMinerals
+  totalMinerals,
+  hasRemainingResources,
+  ARRIVAL_THRESHOLD,
+  DOCKING_THRESHOLD
 } from "./worldModel";
 
-const ARRIVAL_THRESHOLD = 0.85;
 const RETURN_CARGO_THRESHOLD = 4;
 
 function moveTowards(robot: Robot, targetX: number, targetZ: number, dtMs: number): Robot {
@@ -152,6 +154,17 @@ function updateIdleRobot(world: WorldState, robot: Robot): Robot {
     };
   }
 
+  if (world.missionPhase === "mining") {
+    const atBase = distance2D(robot.x, robot.z, world.homeBase.x, world.homeBase.z) <= DOCKING_THRESHOLD;
+    if (!atBase) {
+      return {
+        ...robot,
+        state: "returning",
+        targetZone: null
+      };
+    }
+  }
+
   return {
     ...robot,
     state: "patrol"
@@ -168,6 +181,17 @@ function updatePatrolRobot(world: WorldState, robot: Robot, dtMs: number): Robot
   if (!targetZone || targetZone.status === "avoid" || targetZone.claimedBy) {
     const nextTargetId = findPatrolTarget(world, robot);
     if (!nextTargetId) {
+      if (world.missionPhase === "mining") {
+        const atBase = distance2D(robot.x, robot.z, world.homeBase.x, world.homeBase.z) <= DOCKING_THRESHOLD;
+        if (!atBase) {
+          return {
+            ...robot,
+            targetZone: null,
+            state: "returning"
+          };
+        }
+      }
+
       return {
         ...robot,
         targetZone: null,
@@ -418,8 +442,7 @@ function updateReturningRobot(world: WorldState, robot: Robot, dtMs: number): Ro
       })()
     : moveTowards(robot, world.homeBase.x, world.homeBase.z, dtMs);
 
-  const arrived =
-    distance2D(movedRobot.x, movedRobot.z, world.homeBase.x, world.homeBase.z) <= ARRIVAL_THRESHOLD + ZONE_SIZE * 0.15;
+  const arrived = distance2D(movedRobot.x, movedRobot.z, world.homeBase.x, world.homeBase.z) <= DOCKING_THRESHOLD;
 
   if (!arrived) {
     return movedRobot;

@@ -6,10 +6,11 @@ import {
   Robot,
   WorldState,
   ZONE_SIZE,
-  appendLog
+  appendLog,
+  ARRIVAL_THRESHOLD,
+  DOCKING_THRESHOLD
 } from "./worldModel";
 
-const ARRIVAL_THRESHOLD = 0.85;
 
 // Generate a spiral sweep order from center outward
 function generateSpiralOrder(gridSize: number): Array<{ col: number; row: number }> {
@@ -164,8 +165,7 @@ export function runGeologistFSM(world: WorldState, dtMs: number): WorldState {
   if (geo.state === "returning") {
     const moved = moveTowards(geo, next.homeBase.x, next.homeBase.z, dtMs);
     const arrived =
-      distance2D(moved.x, moved.z, next.homeBase.x, next.homeBase.z) <=
-      ARRIVAL_THRESHOLD + ZONE_SIZE * 0.15;
+      distance2D(moved.x, moved.z, next.homeBase.x, next.homeBase.z) <= DOCKING_THRESHOLD;
 
     geo.x = moved.x;
     geo.z = moved.z;

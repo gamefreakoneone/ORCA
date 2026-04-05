@@ -12,7 +12,7 @@ Multi-phase autonomous mining simulation with geologist scouting, Claude strateg
 
 **Phase 2 — STRATEGIC PLANNING**: Once the survey is complete, the mothership transmits the full geological report to Claude. Claude creates a targeted mining plan — each worker submarine gets its own ordered list of zones to visit, with priority assignments and ignored zones. This is a single, token-efficient API call.
 
-**Phase 3 — MINING OPERATIONS**: Workers deploy according to Claude's plan. They mine High Yield ore first (3x value), then Low Yield ore. Battery drains during movement and collection. When exhausted (0%), bots return to base for a full recharge. Fish schools migrate randomly between grids and block new robot entry. When workers become idle with remaining resources, Claude is re-queried for lightweight reallocation orders.
+**Phase 3 — MINING OPERATIONS**: Workers deploy according to Claude's plan. They mine High Yield ore first (3x value), then Low Yield ore. Battery drains during movement and collection. When exhausted (0%), bots return to base for a full recharge. Fish schools migrate randomly between grids and block new robot entry. When workers become idle with remaining resources, Claude is re-queried for lightweight reallocation orders. **Once all minerals are extracted, all workers return to the mothership for final docking.**
 
 ### World Model (worldModel.ts)
 - **Dual Minerals**: High Yield Ore (high-value, 3x score) and Low Yield Ore (low-value, 1x score)
@@ -43,6 +43,7 @@ Multi-phase autonomous mining simulation with geologist scouting, Claude strateg
 - Fish blocking: `waiting` state when target zone has fish
 - High Yield ore prioritized over Low Yield during collection
 - Plan index advances when a zone is depleted
+- **Autonomous return to mothership** when no mineral targets remain in the surveyed field
 
 ### Fish Migration (fishMigration.ts)
 - Schools randomly migrate to adjacent zones every 40 ticks
@@ -89,7 +90,8 @@ Multi-phase autonomous mining simulation with geologist scouting, Claude strateg
 7. **Watch Phase 3**: Worker cube bots deploy to assigned sectors, tentacles animate while mining
 8. Fish migrate randomly, occasionally blocking zones
 9. Workers exhaust battery → return to base → recharge → get reallocated by Claude
-10. Mission completes when all minerals extracted
+10. **Return Phase**: Once last crystal is mined, system logs return status
+11. **Mission Complete**: Simulation ends only after all workers dock at mothership
 
 ## Useful Project Files
 
