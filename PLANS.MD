@@ -1,4 +1,4 @@
-# AquaSwarm v2 — Progress Notes
+# ORCA v2 — Progress Notes
 
 ## Current Status
 

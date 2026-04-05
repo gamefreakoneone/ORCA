@@ -1,6 +1,6 @@
-# AquaSwarm
+# ORCA
 
-AquaSwarm is a browser-based hackathon demo for ecology-aware underwater mining with an autonomous robot swarm.
+ORCA is a browser-based hackathon demo for ecology-aware underwater mining with an autonomous robot swarm.
 
 The app simulates 3D submarines collecting polymetallic nodules across a grid-based ocean floor while avoiding wildlife-heavy zones. A local robot FSM handles moment-to-moment autonomy, and Claude can act as mission control by issuing higher-level assignments, patrol orders, and avoidance updates.
 

@@ -37,7 +37,7 @@ export default function ControlPanel({
     <aside className="control-panel">
       <header className="panel-hero">
         <p className="eyebrow">Multi-Phase Autonomous Mining Swarm</p>
-        <h1>AquaSwarm</h1>
+        <h1>ORCA</h1>
         <p className="muted-copy">
           A geologist scouts the ocean floor, Claude plans the strategy, and worker
           submarines mine high &amp; low yield ore while dodging migratory fish schools.
